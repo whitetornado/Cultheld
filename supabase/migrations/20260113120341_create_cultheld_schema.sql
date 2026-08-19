@@ -105,12 +105,13 @@
   - Admin-only write for catalog management
 */
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Enable required extensions (gen_random_uuid() is core, but pgcrypto's digest()
+-- is used later by RLS policies for return-token hashing)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Create seasons table
 CREATE TABLE IF NOT EXISTS seasons (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   start_year integer NOT NULL,
   end_year integer NOT NULL,
@@ -121,7 +122,7 @@ CREATE TABLE IF NOT EXISTS seasons (
 
 -- Create clubs table
 CREATE TABLE IF NOT EXISTS clubs (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   slug text UNIQUE NOT NULL,
   logo_url text,
@@ -130,7 +131,7 @@ CREATE TABLE IF NOT EXISTS clubs (
 
 -- Create legends table
 CREATE TABLE IF NOT EXISTS legends (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
   slug text UNIQUE NOT NULL,
   description text DEFAULT '',
@@ -141,7 +142,7 @@ CREATE TABLE IF NOT EXISTS legends (
 
 -- Create legend_assignments table
 CREATE TABLE IF NOT EXISTS legend_assignments (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   season_id uuid REFERENCES seasons(id) ON DELETE CASCADE,
   club_id uuid REFERENCES clubs(id) ON DELETE CASCADE,
   legend_id uuid REFERENCES legends(id) ON DELETE CASCADE,
@@ -157,9 +158,19 @@ CREATE TABLE IF NOT EXISTS product_types (
   base_price decimal(10,2) DEFAULT 0
 );
 
+-- Seed the three product types up front — product_configs and product_variants
+-- both have a foreign key to product_types(id) and are seeded later in the
+-- migration history, so this must exist before those run.
+INSERT INTO product_types (id, name, description, base_price)
+VALUES
+  ('tshirt', 'T-Shirt', 'Premium katoenen t-shirt', 29.99),
+  ('sweater', 'Sweater', 'Premium sweater', 44.99),
+  ('hoodie', 'Hoodie', 'Premium hoodie', 54.99)
+ON CONFLICT (id) DO NOTHING;
+
 -- Create product_variants table
 CREATE TABLE IF NOT EXISTS product_variants (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   product_type_id text REFERENCES product_types(id) ON DELETE CASCADE,
   color_name text NOT NULL,
   color_hex text NOT NULL,
@@ -172,7 +183,7 @@ CREATE TABLE IF NOT EXISTS product_variants (
 
 -- Create mockup_placements table
 CREATE TABLE IF NOT EXISTS mockup_placements (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   legend_id uuid REFERENCES legends(id) ON DELETE CASCADE,
   product_type_id text REFERENCES product_types(id) ON DELETE CASCADE,
   x_position decimal(5,2) DEFAULT 50,
@@ -184,7 +195,7 @@ CREATE TABLE IF NOT EXISTS mockup_placements (
 
 -- Create cart_items table
 CREATE TABLE IF NOT EXISTS cart_items (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id text NOT NULL,
   user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
   legend_id uuid REFERENCES legends(id) ON DELETE CASCADE,
@@ -196,7 +207,7 @@ CREATE TABLE IF NOT EXISTS cart_items (
 
 -- Create orders table
 CREATE TABLE IF NOT EXISTS orders (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   order_number text UNIQUE NOT NULL,
   user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   customer_email text NOT NULL,
@@ -212,7 +223,7 @@ CREATE TABLE IF NOT EXISTS orders (
 
 -- Create order_items table
 CREATE TABLE IF NOT EXISTS order_items (
-  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id uuid REFERENCES orders(id) ON DELETE CASCADE,
   legend_name text NOT NULL,
   product_type text NOT NULL,
