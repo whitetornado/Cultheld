@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resend Order Confirmations</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background-color: #f9fafb;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+    }
+    button {
+      background-color: black;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    button:hover {
+      background-color: #333;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #log {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .success {
+      color: #10b981;
+      font-weight: 600;
+    }
+    .error {
+      color: #ef4444;
+      font-weight: 600;
+    }
+    .info {
+      color: #3b82f6;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Resend Order Confirmation Emails</h1>
+    <p>Deze tool verstuurt orderbevestigingen voor alle betaalde orders waar de webhook niet is aangeroepen.</p>
+
+    <button id="resendBtn" onclick="resendEmails()">Start Email Verzending</button>
+
+    <div id="log"></div>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+    const supabaseUrl = 'https://kraszqrhydhhkknyapxa.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtyYXN6cXJoeWRoaGtrbnlhcHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgzMDM3NzcsImV4cCI6MjA4Mzg3OTc3N30.dJA6hNpvAcNueNIHfz7tp6_fs-ND3UkoclTcOqWS-qY';
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    function log(message, type = 'info') {
+      const logDiv = document.getElementById('log');
+      const timestamp = new Date().toLocaleTimeString();
+      const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+      logDiv.innerHTML += `<span class="${className}">[${timestamp}]</span> ${message}\n`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    window.resendEmails = async function() {
+      const btn = document.getElementById('resendBtn');
+      btn.disabled = true;
+      document.getElementById('log').innerHTML = '';
+
+      log('Zoeken naar betalingen zonder orderbevestiging...', 'info');
+
+      try {
+        const { data: payments, error } = await supabase
+          .from('payments')
+          .select('id, purchase_id, mollie_payment_id, status, webhook_called_at')
+          .eq('status', 'paid')
+          .is('webhook_called_at', null)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          log(`❌ Fout bij ophalen betalingen: ${error.message}`, 'error');
+          btn.disabled = false;
+          return;
+        }
+
+        if (!payments || payments.length === 0) {
+          log('✓ Geen betalingen gevonden die emails nodig hebben.', 'success');
+          btn.disabled = false;
+          return;
+        }
+
+        log(`Gevonden: ${payments.length} betaling(en)\n`, 'info');
+
+        for (const payment of payments) {
+          log(`\nVerwerken: Payment ${payment.id.substring(0, 8)}...`, 'info');
+          log(`  Mollie ID: ${payment.mollie_payment_id}`, 'info');
+
+          try {
+            const { data, error } = await supabase.functions.invoke('resend-order-confirmation', {
+              body: { payment_id: payment.id }
+            });
+
+            if (error) {
+              log(`  ❌ Mislukt: ${error.message}`, 'error');
+            } else if (data && data.success) {
+              log(`  ✓ Succesvol verzonden!`, 'success');
+            } else {
+              log(`  ⚠ Onbekende respons: ${JSON.stringify(data)}`, 'error');
+            }
+          } catch (err) {
+            log(`  ❌ Fout: ${err.message}`, 'error');
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        log('\n✓ Klaar met versturen!', 'success');
+      } catch (err) {
+        log(`❌ Onverwachte fout: ${err.message}`, 'error');
+      }
+
+      btn.disabled = false;
+    };
+  </script>
+</body>
+</html>

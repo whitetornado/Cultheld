@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Email Systeem - Cultheld Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen py-8">
+  <div class="max-w-4xl mx-auto px-4">
+    <div class="bg-white rounded-lg shadow-md p-8 mb-6">
+      <h1 class="text-3xl font-bold mb-2">Email Systeem Tester</h1>
+      <p class="text-gray-600 mb-6">Test alle email notificaties door naar info@cultheld.nl te versturen</p>
+
+      <div class="space-y-6">
+        <!-- Test Order Confirmation -->
+        <div class="border border-gray-200 rounded-lg p-6">
+          <h2 class="text-xl font-bold mb-4">1. Orderbevestiging</h2>
+          <p class="text-gray-600 mb-4">Verstuurt een orderbevestiging email zoals klant ontvangt na bestelling.</p>
+          <button
+            onclick="testOrderConfirmation()"
+            class="bg-black text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
+          >
+            Test Orderbevestiging
+          </button>
+          <div id="order-result" class="mt-4"></div>
+        </div>
+
+        <!-- Test Shipping Notification -->
+        <div class="border border-gray-200 rounded-lg p-6">
+          <h2 class="text-xl font-bold mb-4">2. Verzendbevestiging</h2>
+          <p class="text-gray-600 mb-4">Verstuurt een verzendbevestiging met track & trace informatie.</p>
+          <button
+            onclick="testShippingNotification()"
+            class="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors"
+          >
+            Test Verzendbevestiging
+          </button>
+          <div id="shipping-result" class="mt-4"></div>
+        </div>
+
+        <!-- Test All Flow -->
+        <div class="border border-gray-200 rounded-lg p-6 bg-blue-50">
+          <h2 class="text-xl font-bold mb-4">3. Complete Flow Testen</h2>
+          <p class="text-gray-600 mb-4">Verstuurt alle emails in volgorde: bevestiging → verzending</p>
+          <button
+            onclick="testCompleteFlow()"
+            class="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Test Complete Email Flow
+          </button>
+          <div id="flow-result" class="mt-4"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+      <h3 class="font-bold mb-2">Belangrijk:</h3>
+      <ul class="list-disc list-inside space-y-1 text-sm text-gray-700">
+        <li>Alle test emails worden verstuurd naar <strong>info@cultheld.nl</strong></li>
+        <li>Controleer je inbox en spam folder</li>
+        <li>RESEND_API_KEY moet geconfigureerd zijn in Supabase</li>
+        <li>Emails worden verstuurd via Resend.com</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://kraszqrhydhhkknyapxa.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtyYXN6cXJoeWRoaGtrbnlhcHhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgzMDM3NzcsImV4cCI6MjA4Mzg3OTc3N30.dJA6hNpvAcNueNIHfz7tp6_fs-ND3UkoclTcOqWS-qY';
+
+    function showResult(elementId, message, isSuccess) {
+      const element = document.getElementById(elementId);
+      element.innerHTML = `
+        <div class="p-4 rounded-lg ${isSuccess ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+          ${message}
+        </div>
+      `;
+    }
+
+    function showLoading(elementId) {
+      const element = document.getElementById(elementId);
+      element.innerHTML = `
+        <div class="p-4 rounded-lg bg-blue-100 text-blue-800">
+          <div class="flex items-center gap-2">
+            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-800"></div>
+            <span>Bezig met versturen...</span>
+          </div>
+        </div>
+      `;
+    }
+
+    async function testOrderConfirmation() {
+      showLoading('order-result');
+
+      const testOrderData = {
+        order_number: 'TEST-' + Date.now(),
+        customer_email: 'info@cultheld.nl',
+        customer_name: 'Test Admin',
+        customer_phone: '+31612345678',
+        shipping_address: {
+          street: 'Teststraat 123',
+          city: 'Amsterdam',
+          postal_code: '1012 AB',
+          country: 'Nederland'
+        },
+        subtotal: 39.99,
+        shipping_cost: 5.95,
+        tax: 9.65,
+        total: 55.59,
+        items: [
+          {
+            legend_name: 'Johan Cruijff',
+            product_type_name: 'T-Shirt',
+            color_name: 'Zwart',
+            size: 'M',
+            quantity: 1,
+            unit_price: 39.99,
+            total_price: 39.99
+          }
+        ]
+      };
+
+      try {
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/send-order-confirmation`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify(testOrderData),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          showResult('order-result', `✅ Orderbevestiging verzonden naar info@cultheld.nl<br>Order: ${testOrderData.order_number}`, true);
+        } else {
+          showResult('order-result', `❌ Fout: ${result.error || 'Onbekende fout'}`, false);
+        }
+      } catch (error) {
+        showResult('order-result', `❌ Netwerk fout: ${error.message}`, false);
+      }
+    }
+
+    async function testShippingNotification() {
+      showLoading('shipping-result');
+
+      const testShippingData = {
+        order_number: 'TEST-' + Date.now(),
+        customer_email: 'info@cultheld.nl',
+        customer_name: 'Test Admin',
+        tracking_number: '3SABCD123456789',
+        carrier: 'PostNL'
+      };
+
+      try {
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/send-shipping-notification`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify(testShippingData),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          showResult('shipping-result', `✅ Verzendbevestiging verzonden naar info@cultheld.nl<br>Order: ${testShippingData.order_number}<br>Track & Trace: ${testShippingData.tracking_number}`, true);
+        } else {
+          showResult('shipping-result', `❌ Fout: ${result.error || 'Onbekende fout'}`, false);
+        }
+      } catch (error) {
+        showResult('shipping-result', `❌ Netwerk fout: ${error.message}`, false);
+      }
+    }
+
+    async function testCompleteFlow() {
+      showLoading('flow-result');
+
+      const orderNumber = 'TEST-' + Date.now();
+
+      try {
+        // 1. Order Confirmation
+        const orderData = {
+          order_number: orderNumber,
+          customer_email: 'info@cultheld.nl',
+          customer_name: 'Test Admin',
+          customer_phone: '+31612345678',
+          shipping_address: {
+            street: 'Teststraat 123',
+            city: 'Amsterdam',
+            postal_code: '1012 AB',
+            country: 'Nederland'
+          },
+          subtotal: 39.99,
+          shipping_cost: 5.95,
+          tax: 9.65,
+          total: 55.59,
+          items: [
+            {
+              legend_name: 'Johan Cruijff',
+              product_type_name: 'T-Shirt',
+              color_name: 'Zwart',
+              size: 'M',
+              quantity: 1,
+              unit_price: 39.99,
+              total_price: 39.99
+            }
+          ]
+        };
+
+        const orderResponse = await fetch(`${SUPABASE_URL}/functions/v1/send-order-confirmation`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify(orderData),
+        });
+
+        if (!orderResponse.ok) {
+          throw new Error('Order confirmation failed');
+        }
+
+        // Wait 2 seconds between emails
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 2. Shipping Notification
+        const shippingData = {
+          order_number: orderNumber,
+          customer_email: 'info@cultheld.nl',
+          customer_name: 'Test Admin',
+          tracking_number: '3SABCD123456789',
+          carrier: 'PostNL'
+        };
+
+        const shippingResponse = await fetch(`${SUPABASE_URL}/functions/v1/send-shipping-notification`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify(shippingData),
+        });
+
+        if (!shippingResponse.ok) {
+          throw new Error('Shipping notification failed');
+        }
+
+        showResult('flow-result', `
+          ✅ Complete email flow succesvol verzonden naar info@cultheld.nl<br><br>
+          <strong>Order: ${orderNumber}</strong><br>
+          ✓ Orderbevestiging<br>
+          ✓ Verzendbevestiging<br><br>
+          Controleer je inbox voor beide emails!
+        `, true);
+
+      } catch (error) {
+        showResult('flow-result', `❌ Fout in flow: ${error.message}`, false);
+      }
+    }
+  </script>
+</body>
+</html>
