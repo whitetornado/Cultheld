@@ -18,16 +18,11 @@ export const ResetPassword = () => {
 
     const extractAuthParams = () => {
       const hash = window.location.hash;
-      console.log('Full hash:', hash);
+      if (!hash) return null;
 
-      // Extract auth parameters after the second #
-      const secondHashIndex = hash.indexOf('#', 1);
-      if (secondHashIndex === -1) return null;
-
-      const authFragment = hash.substring(secondHashIndex + 1);
-      console.log('Auth fragment:', authFragment);
-
-      const params = new URLSearchParams(authFragment);
+      // Supabase appends recovery tokens as a URL hash fragment, e.g.
+      // #access_token=...&refresh_token=...&type=recovery
+      const params = new URLSearchParams(hash.substring(1));
       const accessToken = params.get('access_token');
       const refreshToken = params.get('refresh_token');
       const type = params.get('type');
@@ -72,8 +67,8 @@ export const ResetPassword = () => {
             if (mounted) {
               setHasValidSession(true);
               setSessionChecked(true);
-              // Clean up URL by removing auth parameters
-              window.location.hash = '/reset-password';
+              // Clean up URL by removing the auth token hash fragment
+              window.history.replaceState({}, '', '/reset-password');
             }
             return;
           }

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, MouseEvent, AnchorHTMLAttributes } from 'react';
 
 interface RouterContextType {
   currentPath: string;
@@ -16,27 +16,23 @@ export const useRouter = () => useContext(RouterContext);
 
 export const Router = ({ children }: { children: ReactNode }) => {
   const getCleanPath = () => {
-    const hash = window.location.hash.slice(1) || '/';
-    // Remove any auth parameters (access_token, refresh_token, etc.) from the path
-    // These appear after a second # in the URL
-    const cleanHash = hash.split('#')[0] || '/';
-    return cleanHash;
+    return window.location.pathname + window.location.search;
   };
 
   const [currentPath, setCurrentPath] = useState(getCleanPath());
   const [params, setParams] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const handleHashChange = () => {
+    const handlePopState = () => {
       const path = getCleanPath();
       setCurrentPath(path);
       parseParams(path);
     };
 
-    window.addEventListener('hashchange', handleHashChange);
+    window.addEventListener('popstate', handlePopState);
     parseParams(currentPath);
 
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   const parseParams = (path: string) => {
@@ -68,7 +64,18 @@ export const Router = ({ children }: { children: ReactNode }) => {
   };
 
   const navigate = (path: string) => {
-    window.location.hash = path;
+    // Preserve any URL hash fragment already present (used briefly by Supabase's
+    // password-recovery redirect, which appends #access_token=...&type=recovery).
+    const hash = window.location.hash;
+    const nextUrl = path + hash;
+
+    if (nextUrl === getCleanPath() + hash) return;
+
+    window.history.pushState({}, '', nextUrl);
+    const newPath = getCleanPath();
+    setCurrentPath(newPath);
+    parseParams(newPath);
+    window.scrollTo(0, 0);
   };
 
   return (
@@ -104,4 +111,40 @@ export const Route = ({ path, component: Component }: RouteProps) => {
   if (!matchPath(path, currentPath)) return null;
 
   return <Component />;
+};
+
+interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
+  to: string;
+  children: ReactNode;
+}
+
+// Drop-in replacement for <a href="/path">: navigates via the History API
+// instead of a full page reload, while still behaving like a normal link
+// (middle-click / cmd-click / ctrl-click to open in a new tab still works).
+export const Link = ({ to, children, onClick, ...rest }: LinkProps) => {
+  const { navigate } = useRouter();
+
+  const handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    onClick?.(e);
+
+    if (
+      e.defaultPrevented ||
+      e.button !== 0 ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      e.altKey
+    ) {
+      return;
+    }
+
+    e.preventDefault();
+    navigate(to);
+  };
+
+  return (
+    <a href={to} onClick={handleClick} {...rest}>
+      {children}
+    </a>
+  );
 };

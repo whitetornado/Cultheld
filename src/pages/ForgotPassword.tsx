@@ -26,7 +26,7 @@ export const ForgotPassword = () => {
         },
         body: JSON.stringify({
           email: email,
-          redirect_url: `${window.location.origin}/#/reset-password`,
+          redirect_url: `${window.location.origin}/reset-password`,
         }),
       });
 

@@ -395,7 +395,7 @@ export const Checkout = () => {
                   <span className="text-sm text-gray-700">
                     Ik ga akkoord met de{' '}
                     <a
-                      href="#/terms"
+                      href="/terms"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-black underline hover:no-underline font-semibold"

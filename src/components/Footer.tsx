@@ -1,3 +1,5 @@
+import { Link } from '../lib/router';
+
 export const Footer = () => {
   return (
     <footer className="bg-black text-white border-t border-gray-800 mt-20">
@@ -18,14 +20,14 @@ export const Footer = () => {
             <h4 className="font-semibold mb-4">Shop</h4>
             <ul className="space-y-2 text-sm text-gray-400">
               <li>
-                <a href="#/seizoenen" className="hover:text-white transition-colors">
+                <Link to="/seizoenen" className="hover:text-white transition-colors">
                   Eredivisie Seizoenen
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#/legends" className="hover:text-white transition-colors">
+                <Link to="/legends" className="hover:text-white transition-colors">
                   Wereldlegends
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
@@ -34,19 +36,19 @@ export const Footer = () => {
             <h4 className="font-semibold mb-4">Klantenservice</h4>
             <ul className="space-y-2 text-sm text-gray-400">
               <li>
-                <a href="#/track-order" className="hover:text-white transition-colors">
+                <Link to="/track-order" className="hover:text-white transition-colors">
                   Volg Je Bestelling
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#/faq" className="hover:text-white transition-colors">
+                <Link to="/faq" className="hover:text-white transition-colors">
                   Veelgestelde Vragen
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#/contact" className="hover:text-white transition-colors">
+                <Link to="/contact" className="hover:text-white transition-colors">
                   Contact
-                </a>
+                </Link>
               </li>
             </ul>
           </div>

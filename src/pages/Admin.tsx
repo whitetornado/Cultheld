@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, ChevronDown, ChevronUp, Copy } from 'lucide-react';
 import { supabase, isAdmin } from '../lib/supabase';
+import { Link } from '../lib/router';
 import { Season, Club, Legend, ProductType, ProductVariant, ShirtTemplate, ProductConfig } from '../lib/types';
 import { useToast } from '../lib/toast';
 import { Modal } from '../components/Modal';
@@ -161,12 +162,12 @@ export const Admin = () => {
           <p className="text-gray-600 mb-6">
             Je hebt geen toegang tot het admin dashboard
           </p>
-          <a
-            href="#/login"
+          <Link
+            to="/login"
             className="inline-block bg-black text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
           >
             Ga naar Login
-          </a>
+          </Link>
           <p className="text-sm text-gray-500 mt-4">
             Log in met admin@cultheld.nl om toegang te krijgen
           </p>

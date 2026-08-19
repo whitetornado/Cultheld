@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase, isAdmin } from '../lib/supabase';
-import { useRouter } from '../lib/router';
+import { useRouter, Link } from '../lib/router';
 import { LogIn } from 'lucide-react';
 
 export const Login = () => {
@@ -137,12 +137,12 @@ export const Login = () => {
           </form>
 
           <div className="mt-6 text-center">
-            <a
-              href="#/"
+            <Link
+              to="/"
               className="text-sm text-gray-600 hover:text-black transition-colors"
             >
               Terug naar home
-            </a>
+            </Link>
           </div>
         </div>
       </div>

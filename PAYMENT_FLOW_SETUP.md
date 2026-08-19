@@ -25,7 +25,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...     # signing secret of the webhook endpoint bel
 ```
 
 Stripe Dashboard configuration:
-- Developers → Webhooks → Add endpoint: `https://kraszqrhydhhkknyapxa.supabase.co/functions/v1/stripe-webhook`
+- Developers → Webhooks → Add endpoint: `https://svxerszhfqzhsmqrzpym.supabase.co/functions/v1/stripe-webhook`
 - Events to send: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`
 - Copy the endpoint's signing secret into `STRIPE_WEBHOOK_SECRET`
 - Test mode: use test API keys + Stripe's test cards while developing
@@ -55,8 +55,8 @@ What it does:
 - Builds itemized line items from the cart (legend + product + color/size) plus a shipping line item
 - Creates a Checkout Session via the Stripe API (`mode: payment`)
 - Stores the session in the `payments` table (`stripe_checkout_session_id`, `checkout_url`)
-- Sets `success_url`: `${APP_BASE_URL}/#/payment/return?purchase_id=...&token=...&session_id={CHECKOUT_SESSION_ID}`
-- Sets `cancel_url`: `${APP_BASE_URL}/#/checkout`
+- Sets `success_url`: `${APP_BASE_URL}/payment/return?purchase_id=...&token=...&session_id={CHECKOUT_SESSION_ID}`
+- Sets `cancel_url`: `${APP_BASE_URL}/checkout`
 - Updates purchase status to `pending_payment`
 
 **Critical:** If APP_BASE_URL is not set or wrong, users will be redirected to the wrong domain!
@@ -88,7 +88,7 @@ When user returns from Stripe:
    - Pending/open: if still processing or the session wasn't completed yet
    - Failed: if payment failed or the session expired
 
-**Route:** `/#/payment/return?purchase_id=xxx&token=xxx&session_id=xxx`
+**Route:** `/payment/return?purchase_id=xxx&token=xxx&session_id=xxx`
 
 ## Troubleshooting
 
@@ -102,7 +102,7 @@ When user returns from Stripe:
 3. Redeploy edge functions if needed
 
 **Verify:**
-- Check diagnostics page: `/#/admin/payments/diagnostics`
+- Check diagnostics page: `/admin/payments/diagnostics`
 - Look at recent purchase in database
 - Check payments table for correct checkout_url
 
@@ -112,7 +112,7 @@ When user returns from Stripe:
 
 **Fix:**
 1. Check Stripe Dashboard → Developers → Webhooks → recent deliveries for the endpoint
-2. Verify webhook URL is: `https://kraszqrhydhhkknyapxa.supabase.co/functions/v1/stripe-webhook`
+2. Verify webhook URL is: `https://svxerszhfqzhsmqrzpym.supabase.co/functions/v1/stripe-webhook`
 3. Check Edge Function logs for webhook errors
 4. Verify `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are configured and match the endpoint's mode (test vs live)
 
@@ -131,14 +131,14 @@ When user returns from Stripe:
 3. Check admin user has role='admin' in metadata
 
 **Verify:**
-- Go to `/#/admin/purchases` to see all purchases
+- Go to `/admin/purchases` to see all purchases
 - Filter by status to see pending vs paid
 - Check diagnostics page for recent purchases
 
 ## Admin Pages
 
 ### Purchases Management
-**URL:** `/#/admin/purchases`
+**URL:** `/admin/purchases`
 
 Shows all purchases with:
 - Customer details
@@ -149,7 +149,7 @@ Shows all purchases with:
 - Statistics dashboard
 
 ### Payment Diagnostics
-**URL:** `/#/admin/payments/diagnostics`
+**URL:** `/admin/payments/diagnostics`
 
 Debug information:
 - Last 20 purchases with status
@@ -171,7 +171,7 @@ Fields:
 - `country` - Country (default: Nederland)
 
 ### User Profile Page
-**URL:** `/#/profile`
+**URL:** `/profile`
 
 Logged-in users can:
 - View and edit their profile
@@ -190,7 +190,7 @@ Logged-in users can:
 **Admin capabilities:**
 - Admins can view all customer profiles
 - Admins can edit customer profiles
-- Access via `/#/admin/customers`
+- Access via `/admin/customers`
 
 ## Testing Payment Flow
 
@@ -206,14 +206,14 @@ Logged-in users can:
 ### 2. Verify Flow
 
 1. Place order → should redirect to Stripe Checkout
-2. Complete payment → should return to `/#/payment/return`
+2. Complete payment → should return to `/payment/return`
 3. Check purchase status → should be 'paid'
 4. Check admin panel → order should be visible
 5. Check email → confirmation sent (if configured)
 
 ### 3. Check Diagnostics
 
-1. Go to `/#/admin/payments/diagnostics`
+1. Go to `/admin/payments/diagnostics`
 2. Verify recent purchase appears
 3. Check payment has a Stripe Checkout Session ID
 4. Verify webhook_called_at is set

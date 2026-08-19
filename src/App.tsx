@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Router, Route } from './lib/router';
+import { Router, Route, useRouter } from './lib/router';
 import { CartProvider } from './lib/cart';
 import { ToastProvider } from './lib/toast';
 import { Layout } from './components/Layout';
@@ -33,24 +33,26 @@ import { PaymentDiagnostics } from './pages/admin/PaymentDiagnostics';
 import { Diagnostics } from './pages/admin/Diagnostics';
 import { AuthDebug } from './pages/AuthDebug';
 
-function App() {
-  // Check for password recovery token on app load
+// Redirects to /reset-password when Supabase appends a password-recovery
+// token to the URL as a hash fragment (#access_token=...&type=recovery),
+// no matter which page the user landed on. Must live inside <Router> so it
+// can navigate through the router context.
+function RecoveryRedirect() {
+  const { navigate } = useRouter();
+
   useEffect(() => {
     const hash = window.location.hash;
 
-    // Handle recovery tokens by redirecting to reset-password page
-    if (hash && hash.includes('type=recovery')) {
-      const currentPath = hash.split('#')[0] || '';
-
-      // If not already on reset-password, navigate there
-      if (!currentPath.includes('/reset-password')) {
-        // Keep the auth tokens in the URL - Supabase will automatically process them
-        const authFragment = hash.substring(hash.indexOf('#', 1));
-        window.location.hash = `/reset-password${authFragment}`;
-      }
+    if (hash && hash.includes('type=recovery') && window.location.pathname !== '/reset-password') {
+      // navigate() preserves the existing hash, so the tokens survive the redirect
+      navigate('/reset-password');
     }
   }, []);
 
+  return null;
+}
+
+function App() {
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
       if (event === 'SIGNED_OUT') {
@@ -81,6 +83,7 @@ function App() {
     <ToastProvider>
       <CartProvider>
         <Router>
+          <RecoveryRedirect />
           <Layout>
             <Route path="/" component={Home} />
             <Route path="/seizoenen" component={Seasons} />

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { seedDatabase } from '../seed-data';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../lib/toast';
+import { Link } from '../lib/router';
 
 export const Seed = () => {
   const [loading, setLoading] = useState(false);
@@ -85,18 +86,18 @@ export const Seed = () => {
             <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
               <p className="text-green-800 font-semibold mb-2">Database succesvol gevuld!</p>
               <div className="flex gap-3 justify-center mt-4">
-                <a
-                  href="#/"
+                <Link
+                  to="/"
                   className="bg-black text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
                 >
                   Ga naar home
-                </a>
-                <a
-                  href="#/legends"
+                </Link>
+                <Link
+                  to="/legends"
                   className="bg-white text-black px-6 py-2 rounded-lg font-semibold border-2 border-black hover:bg-gray-100 transition-colors"
                 >
                   Bekijk Legends
-                </a>
+                </Link>
               </div>
             </div>
           ) : error ? (

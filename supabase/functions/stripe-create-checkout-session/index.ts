@@ -155,8 +155,8 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const successUrl = `${appBaseUrl}/#/payment/return?purchase_id=${purchase_id}&token=${return_token}&session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${appBaseUrl}/#/checkout`;
+    const successUrl = `${appBaseUrl}/payment/return?purchase_id=${purchase_id}&token=${return_token}&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${appBaseUrl}/checkout`;
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
