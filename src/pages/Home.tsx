@@ -3,12 +3,26 @@ import { ArrowRight, CheckCircle, Truck, RotateCcw, User, ShoppingBag, Package }
 import { useRouter } from '../lib/router';
 import { supabase } from '../lib/supabase';
 import { Season, Legend } from '../lib/types';
+import { useSEO } from '../lib/seo';
 
 export const Home = () => {
   const { navigate } = useRouter();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [globalLegends, setGlobalLegends] = useState<Legend[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useSEO({
+    title: 'Cultheld - Draag jouw voetbalheld op premium streetwear',
+    description: 'Kies jouw favoriete voetballegende uit de Eredivisie of wereldlegends en draag ze op premium hoodies, sweaters en t-shirts. We all love football.',
+    path: '/',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: 'Cultheld',
+      url: 'https://cultheld.nl',
+      logo: 'https://cultheld.nl/logo-ch.png',
+    },
+  });
 
   useEffect(() => {
     loadData();

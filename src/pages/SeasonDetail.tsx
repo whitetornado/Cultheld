@@ -3,6 +3,7 @@ import { ArrowRight, ChevronLeft } from 'lucide-react';
 import { useRouter } from '../lib/router';
 import { supabase } from '../lib/supabase';
 import { Season, Club } from '../lib/types';
+import { useSEO, breadcrumbJsonLd } from '../lib/seo';
 
 export const SeasonDetail = () => {
   const { navigate, params } = useRouter();
@@ -54,6 +55,23 @@ export const SeasonDetail = () => {
 
     setLoading(false);
   };
+
+  const path = `/seizoen/${params.seasonSlug || ''}`;
+  const cityNames = [...new Set(clubs.map((c) => c.city).filter(Boolean))] as string[];
+
+  useSEO({
+    title: season ? `Eredivisie shirts seizoen ${season.name}` : 'Seizoen',
+    description: season
+      ? `Kies een Eredivisie-club uit seizoen ${season.name}${cityNames.length ? ` (o.a. ${cityNames.slice(0, 5).join(', ')})` : ''} en zet jouw favoriete cultheld op een premium shirt, hoodie of sweater.`
+      : 'Bekijk de Eredivisie-clubs per seizoen bij Cultheld.',
+    path,
+    noindex: !loading && !season,
+    jsonLd: season ? breadcrumbJsonLd([
+      { name: 'Home', path: '/' },
+      { name: 'Seizoenen', path: '/seizoenen' },
+      { name: season.name, path },
+    ]) : undefined,
+  });
 
   if (loading) {
     return (

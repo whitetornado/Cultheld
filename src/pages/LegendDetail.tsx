@@ -3,8 +3,9 @@ import { ChevronLeft, ShoppingCart, Check } from 'lucide-react';
 import { useRouter } from '../lib/router';
 import { useCart } from '../lib/cart';
 import { supabase } from '../lib/supabase';
-import { Legend, ProductType, ProductConfig } from '../lib/types';
+import { Legend, ProductType, ProductConfig, Club } from '../lib/types';
 import { MockupPreview } from '../components/MockupPreview';
+import { useSEO, breadcrumbJsonLd, SITE_URL } from '../lib/seo';
 
 const SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
@@ -12,6 +13,7 @@ export const LegendDetail = () => {
   const { navigate, params } = useRouter();
   const { addToCart } = useCart();
   const [legend, setLegend] = useState<Legend | null>(null);
+  const [club, setClub] = useState<Club | null>(null);
   const [productTypes, setProductTypes] = useState<ProductType[]>([]);
   const [productConfigs, setProductConfigs] = useState<ProductConfig[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,10 +42,17 @@ export const LegendDetail = () => {
     if (legendData) {
       setLegend(legendData);
 
-      const [typesRes, configsRes] = await Promise.all([
+      const [typesRes, configsRes, clubRes] = await Promise.all([
         supabase.from('product_types').select('*'),
         supabase.from('product_configs').select('*').order('sort_order'),
+        legendData.club_id
+          ? supabase.from('clubs').select('*').eq('id', legendData.club_id).maybeSingle()
+          : Promise.resolve({ data: null }),
       ]);
+
+      if (clubRes.data) {
+        setClub(clubRes.data);
+      }
 
       if (typesRes.data) {
         setProductTypes(typesRes.data);
@@ -123,6 +132,48 @@ export const LegendDetail = () => {
       setAddingToCart(false);
     }
   };
+
+  const path = `/legend/${params.legendSlug || ''}`;
+  const cityLabel = club?.city ? `, ${club.city}` : '';
+  const clubLabel = club ? ` (${club.name}${cityLabel})` : '';
+  const lowestPrice = productTypes.length
+    ? Math.min(...productTypes.map((t) => Number(t.base_price)))
+    : undefined;
+
+  useSEO({
+    title: legend ? `${legend.name} shirt${clubLabel}` : 'Legend',
+    description: legend
+      ? `Draag ${legend.name}${clubLabel} op een premium t-shirt, hoodie of sweater.${lowestPrice ? ` Vanaf €${lowestPrice.toFixed(2)}.` : ''} ${legend.bio ? legend.bio.slice(0, 120) : ''}`.trim()
+      : 'Bekijk deze cultheld en zet hem op een premium shirt.',
+    path,
+    image: legend?.png_url || undefined,
+    type: 'product',
+    noindex: !loading && !legend,
+    jsonLd: legend ? [
+      breadcrumbJsonLd([
+        { name: 'Home', path: '/' },
+        { name: legend.category === 'world' ? 'Wereldlegends' : 'Legends', path: '/legends' },
+        { name: legend.name, path },
+      ]),
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: `${legend.name} shirt`,
+        description: legend.bio || `Cultheld shirt met ${legend.name} erop.`,
+        image: legend.png_url ? [legend.png_url] : undefined,
+        brand: { '@type': 'Brand', name: 'Cultheld' },
+        ...(lowestPrice ? {
+          offers: {
+            '@type': 'AggregateOffer',
+            priceCurrency: 'EUR',
+            lowPrice: lowestPrice.toFixed(2),
+            availability: 'https://schema.org/InStock',
+            url: `${SITE_URL}${path}`,
+          },
+        } : {}),
+      },
+    ] : undefined,
+  });
 
   if (loading) {
     return (

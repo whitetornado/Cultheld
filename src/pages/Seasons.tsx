@@ -3,11 +3,22 @@ import { ArrowRight } from 'lucide-react';
 import { useRouter } from '../lib/router';
 import { supabase } from '../lib/supabase';
 import { Season } from '../lib/types';
+import { useSEO, breadcrumbJsonLd } from '../lib/seo';
 
 export const Seasons = () => {
   const { navigate } = useRouter();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useSEO({
+    title: 'Eredivisie seizoenen',
+    description: 'Bekijk alle Eredivisie-seizoenen bij Cultheld en kies per seizoen een club en cultheld om op een premium t-shirt, hoodie of sweater te zetten.',
+    path: '/seizoenen',
+    jsonLd: breadcrumbJsonLd([
+      { name: 'Home', path: '/' },
+      { name: 'Seizoenen', path: '/seizoenen' },
+    ]),
+  });
 
   useEffect(() => {
     loadSeasons();

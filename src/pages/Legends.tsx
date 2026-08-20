@@ -3,6 +3,7 @@ import { ArrowRight, Search } from 'lucide-react';
 import { useRouter } from '../lib/router';
 import { supabase } from '../lib/supabase';
 import { Legend } from '../lib/types';
+import { useSEO, breadcrumbJsonLd } from '../lib/seo';
 
 export const Legends = () => {
   const { navigate } = useRouter();
@@ -10,6 +11,16 @@ export const Legends = () => {
   const [filteredLegends, setFilteredLegends] = useState<Legend[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  useSEO({
+    title: 'Wereldlegends shirts',
+    description: 'Kies uit de grootste voetballegendes ter wereld en zet jouw favoriet op een premium t-shirt, hoodie of sweater bij Cultheld.',
+    path: '/legends',
+    jsonLd: breadcrumbJsonLd([
+      { name: 'Home', path: '/' },
+      { name: 'Wereldlegends', path: '/legends' },
+    ]),
+  });
 
   useEffect(() => {
     loadLegends();

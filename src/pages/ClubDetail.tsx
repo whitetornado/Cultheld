@@ -3,6 +3,7 @@ import { ChevronLeft, ArrowRight } from 'lucide-react';
 import { useRouter } from '../lib/router';
 import { supabase } from '../lib/supabase';
 import { Season, Club, Legend, LegendAssignment } from '../lib/types';
+import { useSEO, breadcrumbJsonLd } from '../lib/seo';
 
 export const ClubDetail = () => {
   const { navigate, params } = useRouter();
@@ -58,6 +59,34 @@ export const ClubDetail = () => {
 
     setLoading(false);
   };
+
+  const cityLabel = club?.city ? ` ${club.city}` : '';
+  const path = `/seizoen/${params.seasonSlug || ''}/club/${params.clubSlug || ''}`;
+
+  useSEO({
+    title: club ? `${club.name} shirt kopen${cityLabel ? ` – ${club.city}` : ''}` : 'Club',
+    description: club && season
+      ? `Voetbalshirt van ${club.name}${cityLabel} met jouw favoriete cultheld erop. Kies uit de legends van ${club.name} (seizoen ${season.name}) en druk 'm op een premium t-shirt, hoodie of sweater.`
+      : 'Voetbalshirt met jouw favoriete cultheld erop, bij Cultheld.',
+    path,
+    image: club?.logo_url || undefined,
+    noindex: !loading && (!season || !club),
+    jsonLd: club && season ? [
+      breadcrumbJsonLd([
+        { name: 'Home', path: '/' },
+        { name: 'Seizoenen', path: '/seizoenen' },
+        { name: season.name, path: `/seizoen/${params.seasonSlug}` },
+        { name: club.name, path },
+      ]),
+      {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: `${club.name} culthelden${cityLabel}`,
+        description: `Culthelden van ${club.name}${cityLabel} om op een shirt te zetten.`,
+        ...(club.city ? { about: { '@type': 'City', name: club.city } } : {}),
+      },
+    ] : undefined,
+  });
 
   if (loading) {
     return (

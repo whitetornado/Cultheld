@@ -14,6 +14,7 @@ export interface Club {
   slug: string;
   logo_url: string | null;
   season_id: string | null;
+  city: string | null;
   created_at: string;
 }
 

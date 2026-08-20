@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /profile
+Disallow: /checkout
+Disallow: /cart
+Disallow: /payment/return
+Disallow: /login
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /seed
+Disallow: /debug/
+
+Sitemap: https://cultheld.nl/sitemap.xml
