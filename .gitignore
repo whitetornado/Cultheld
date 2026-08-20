@@ -26,3 +26,6 @@ dist-ssr
 ADMIN_CREDENTIALS.md
 setup-admin.html
 test-login.html
+
+# Local Netlify folder
+.netlify
