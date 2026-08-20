@@ -3,13 +3,15 @@ import { CheckCircle, XCircle, Loader, AlertCircle, ExternalLink, RefreshCw } fr
 import { useRouter } from '../lib/router';
 import { getPaymentStatus, type PaymentStatusResponse } from '../lib/payments';
 import { supabase } from '../lib/supabase';
+import { useCart } from '../lib/cart';
 
 const isDev = import.meta.env.DEV;
 
 export const PaymentReturn = () => {
   const { navigate, params } = useRouter();
+  const { clearCart } = useCart();
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState<'checking' | 'paid' | 'failed' | 'pending' | 'open' | 'error'>('checking');
+  const [status, setStatus] = useState<'checking' | 'paid' | 'failed' | 'canceled' | 'pending' | 'open' | 'error'>('checking');
   const [statusData, setStatusData] = useState<PaymentStatusResponse | null>(null);
   const [error, setError] = useState<string>('');
   const [hasSession, setHasSession] = useState(false);
@@ -19,6 +21,11 @@ export const PaymentReturn = () => {
 
   const purchaseId = params.purchase_id;
   const token = params.token;
+  // Stripe redirects here with ?canceled=true when the customer backs out of
+  // the hosted checkout page instead of completing it — no point polling for
+  // a status that will never arrive, so this short-circuits straight to the
+  // "cancelled" screen.
+  const wasCanceled = params.canceled === 'true';
 
   useEffect(() => {
     checkSession();
@@ -32,8 +39,15 @@ export const PaymentReturn = () => {
     setDebugInfo({
       purchaseId,
       hasToken: !!token,
+      canceled: wasCanceled,
       timestamp: new Date().toISOString(),
     });
+
+    if (wasCanceled) {
+      setStatus('canceled');
+      setLoading(false);
+      return;
+    }
 
     checkPaymentStatus();
   }, [purchaseId, token]);
@@ -84,6 +98,11 @@ export const PaymentReturn = () => {
         if (data.payment_status === 'paid' || data.payment?.status === 'paid') {
           setStatus('paid');
           setLoading(false);
+
+          // Only clear the cart once payment is actually confirmed — this is
+          // the single place that happens, so a cancelled or failed attempt
+          // always leaves the cart intact for a retry.
+          clearCart();
 
           if (data.payment && data.payment.webhook_called_at === null) {
             console.log('Webhook not called yet, triggering email fallback...');
@@ -402,6 +421,91 @@ export const PaymentReturn = () => {
     );
   }
 
+  if (status === 'canceled') {
+    return (
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-lg p-12 text-center">
+            <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <XCircle size={48} className="text-yellow-600" />
+            </div>
+            <h1 className="text-3xl font-bold mb-4">Betaling geannuleerd</h1>
+            <p className="text-gray-600 mb-2">
+              Je hebt de betaling afgebroken. Er is niets in rekening gebracht.
+            </p>
+            <p className="text-gray-600 mb-8">
+              Je winkelwagen staat nog klaar — je kunt gewoon opnieuw afrekenen.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => navigate('/checkout')}
+                className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
+              >
+                Opnieuw afrekenen
+              </button>
+              <button
+                onClick={() => navigate('/cart')}
+                className="w-full border-2 border-black text-black py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+              >
+                Winkelwagen bekijken
+              </button>
+            </div>
+          </div>
+        </div>
+        <DebugPanel />
+      </div>
+    );
+  }
+
+  if (status === 'failed') {
+    return (
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-lg p-12 text-center">
+            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <XCircle size={48} className="text-red-600" />
+            </div>
+            <h1 className="text-3xl font-bold mb-4">Betaling mislukt</h1>
+            <p className="text-gray-600 mb-2">
+              Er is iets misgegaan met je betaling, bijvoorbeeld een geweigerde kaart of een verlopen betaalsessie.
+            </p>
+            <p className="text-gray-600 mb-8">
+              Je winkelwagen staat nog klaar — je hoeft niets opnieuw te selecteren.
+            </p>
+            {statusData?.last_synced_at && (
+              <div className="bg-gray-50 rounded-lg p-4 mb-8 text-xs text-gray-500">
+                Laatst gecontroleerd: {new Date(statusData.last_synced_at).toLocaleString('nl-NL')}
+              </div>
+            )}
+            <div className="space-y-3">
+              <button
+                onClick={() => navigate('/checkout')}
+                className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
+              >
+                Opnieuw proberen
+              </button>
+              <button
+                onClick={() => navigate('/cart')}
+                className="w-full border-2 border-black text-black py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+              >
+                Winkelwagen bekijken
+              </button>
+              <button
+                onClick={() => navigate('/contact')}
+                className="w-full text-gray-600 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+              >
+                Contact opnemen
+              </button>
+            </div>
+          </div>
+        </div>
+        <DebugPanel />
+      </div>
+    );
+  }
+
+  // Unreachable in normal operation — every known status is handled above —
+  // kept as a safe fallback rather than assuming exhaustiveness.
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -409,9 +513,9 @@ export const PaymentReturn = () => {
           <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <XCircle size={48} className="text-red-600" />
           </div>
-          <h1 className="text-3xl font-bold mb-4">Betaling mislukt</h1>
+          <h1 className="text-3xl font-bold mb-4">Onbekende betaalstatus</h1>
           <p className="text-gray-600 mb-8">
-            Er is iets misgegaan met je betaling. Probeer het opnieuw of neem contact met ons op.
+            We kunnen de status van je betaling niet bepalen. Je winkelwagen staat nog klaar.
           </p>
           <div className="space-y-3">
             <button

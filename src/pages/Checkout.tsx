@@ -12,7 +12,7 @@ const FREE_SHIPPING_THRESHOLD = 50;
 
 export const Checkout = () => {
   const { navigate } = useRouter();
-  const { items, clearCart } = useCart();
+  const { items } = useCart();
   const { error: showError, success: showSuccess } = useToast();
   const [processing, setProcessing] = useState(false);
   const [orderComplete] = useState(false);
@@ -184,8 +184,10 @@ export const Checkout = () => {
 
       const { checkout_url } = await createStripeCheckout(purchase.id, return_token);
 
-      await clearCart();
-
+      // Cart stays filled until the payment actually succeeds — it's cleared
+      // on the payment-return page once the status comes back "paid", not
+      // here. That way a cancelled or failed payment doesn't leave the
+      // customer staring at an empty cart with nothing to retry.
       window.location.href = checkout_url;
     } catch (error: any) {
       console.error('Error processing order:', error);
