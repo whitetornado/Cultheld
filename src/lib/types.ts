@@ -143,6 +143,22 @@ export interface ProductConfig {
   created_at: string;
 }
 
+export interface LegendPrintOverride {
+  id: string;
+  legend_id: string;
+  print_area_x: number;
+  print_area_y: number;
+  print_area_width: number;
+  print_area_height: number;
+  fit_mode: 'contain' | 'cover' | 'smart_fit';
+  padding_percent: number;
+  vertical_bias: number;
+  max_fill_pct: number;
+  min_visual_size: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ProductTypePreset {
   id: string;
   product_type_id: string;

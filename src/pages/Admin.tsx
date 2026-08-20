@@ -368,6 +368,8 @@ export const Admin = () => {
             clubs={clubs}
             seasons={seasons}
             shirtTemplates={shirtTemplates}
+            productConfigs={productConfigs}
+            productTypes={productTypes}
             onSuccess={() => {
               loadData();
               closeModal();
@@ -1068,6 +1070,8 @@ function LegendForm({
   clubs,
   shirtTemplates,
   seasons,
+  productConfigs,
+  productTypes,
   onSuccess,
 }: {
   mode: 'create' | 'edit';
@@ -1076,6 +1080,8 @@ function LegendForm({
   clubs: Club[];
   shirtTemplates: ShirtTemplate[];
   seasons: Season[];
+  productConfigs: ProductConfig[];
+  productTypes: ProductType[];
   onSuccess: () => void;
 }) {
   const currentLegend = legends.find((l) => l.id === legendId);
@@ -1094,6 +1100,86 @@ function LegendForm({
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentLegend?.png_url || null);
   const [selectedTemplate, setSelectedTemplate] = useState<string>(shirtTemplates[0]?.id || '');
   const { success, error } = useToast();
+
+  // Print gebied is normaal gedeeld per product type/kleur (product_configs).
+  // Een enkel legend/design met een afwijkende vorm (bv. een liggend design
+  // i.p.v. een staande speler) kan hier zijn eigen print gebied krijgen —
+  // dat overschrijft dan de gedeelde template voor alle producttypes van
+  // deze ene legend, zonder de template voor de rest aan te passen.
+  const [useCustomPrintArea, setUseCustomPrintArea] = useState(false);
+  const [printOverrideId, setPrintOverrideId] = useState<string | null>(null);
+  const [previewProductTypeId, setPreviewProductTypeId] = useState<string>(productTypes[0]?.id || '');
+  const [printArea, setPrintArea] = useState({ x: 0.5, y: 0.35, width: 0.3, height: 0.4 });
+  const [printFitMode, setPrintFitMode] = useState<'contain' | 'cover' | 'smart_fit'>('smart_fit');
+  const [printPadding, setPrintPadding] = useState(0.05);
+  const [printVerticalBias, setPrintVerticalBias] = useState(0.5);
+
+  const previewConfig = productConfigs.find(
+    (c) => c.product_type_id === previewProductTypeId && c.is_default
+  ) || productConfigs.find((c) => c.product_type_id === previewProductTypeId);
+
+  const seedPrintAreaFromDefault = () => {
+    if (previewConfig) {
+      setPrintArea({
+        x: previewConfig.print_area_x,
+        y: previewConfig.print_area_y,
+        width: previewConfig.print_area_width,
+        height: previewConfig.print_area_height,
+      });
+      setPrintFitMode(previewConfig.fit_mode);
+      setPrintPadding(previewConfig.padding_percent);
+      setPrintVerticalBias(previewConfig.vertical_bias);
+    }
+  };
+
+  useEffect(() => {
+    if (mode === 'edit' && legendId) {
+      loadPrintOverride();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, legendId]);
+
+  // Keep the "starting point" print area in sync with the selected preview
+  // product type's default template — but only while there's no custom area
+  // being edited yet, so switching preview product doesn't clobber in-progress
+  // custom edits.
+  useEffect(() => {
+    if (!useCustomPrintArea) {
+      seedPrintAreaFromDefault();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewProductTypeId, productConfigs]);
+
+  const loadPrintOverride = async () => {
+    const { data } = await supabase
+      .from('legend_print_overrides')
+      .select('*')
+      .eq('legend_id', legendId)
+      .maybeSingle();
+
+    if (data) {
+      setPrintOverrideId(data.id);
+      setUseCustomPrintArea(true);
+      setPrintArea({
+        x: data.print_area_x,
+        y: data.print_area_y,
+        width: data.print_area_width,
+        height: data.print_area_height,
+      });
+      setPrintFitMode(data.fit_mode);
+      setPrintPadding(data.padding_percent);
+      setPrintVerticalBias(data.vertical_bias);
+    } else {
+      seedPrintAreaFromDefault();
+    }
+  };
+
+  const handleToggleCustomPrintArea = (checked: boolean) => {
+    setUseCustomPrintArea(checked);
+    if (checked && !printOverrideId) {
+      seedPrintAreaFromDefault();
+    }
+  };
 
   useEffect(() => {
     if (mode === 'edit' && legendId && clubId) {
@@ -1203,6 +1289,35 @@ function LegendForm({
       error('Fout: ' + result.error.message);
       setSaving(false);
       return;
+    }
+
+    if (insertedLegendId) {
+      if (useCustomPrintArea) {
+        const overrideData = {
+          legend_id: insertedLegendId,
+          print_area_x: printArea.x,
+          print_area_y: printArea.y,
+          print_area_width: printArea.width,
+          print_area_height: printArea.height,
+          fit_mode: printFitMode,
+          padding_percent: printPadding,
+          vertical_bias: printVerticalBias,
+        };
+
+        const overrideResult = await supabase
+          .from('legend_print_overrides')
+          .upsert(overrideData, { onConflict: 'legend_id' });
+
+        if (overrideResult.error) {
+          error('Legend opgeslagen, maar fout bij eigen print gebied: ' + overrideResult.error.message);
+          setSaving(false);
+          return;
+        }
+      } else if (printOverrideId) {
+        // Toggle was switched back off — remove the override so this legend
+        // falls back to the shared product template again.
+        await supabase.from('legend_print_overrides').delete().eq('legend_id', insertedLegendId);
+      }
     }
 
     if (effectiveClubId && effectiveSeasonId && insertedLegendId) {
@@ -1422,6 +1537,67 @@ function LegendForm({
             </div>
           )}
         </div>
+      </div>
+
+      <div className="border-t pt-6">
+        <div className="flex items-start gap-2 mb-4">
+          <input
+            type="checkbox"
+            id="useCustomPrintArea"
+            checked={useCustomPrintArea}
+            onChange={(e) => handleToggleCustomPrintArea(e.target.checked)}
+            className="w-4 h-4 mt-1"
+          />
+          <label htmlFor="useCustomPrintArea" className="text-sm">
+            <span className="font-semibold">Eigen print gebied voor deze legend</span>
+            <p className="text-gray-500">
+              Standaard gebruikt elke legend hetzelfde print gebied als andere legends op hetzelfde
+              producttype (Producten &gt; Product Template). Zet dit aan als deze afbeelding een
+              andere verhouding heeft (bv. een liggend design i.p.v. een staande speler) — dat
+              overschrijft dan alleen voor déze legend, op elk producttype.
+            </p>
+          </label>
+        </div>
+
+        {useCustomPrintArea && (
+          <div className="space-y-3">
+            {productTypes.length > 1 && (
+              <div>
+                <label className="block text-sm font-semibold mb-2">Voorbeeld op producttype</label>
+                <select
+                  value={previewProductTypeId}
+                  onChange={(e) => setPreviewProductTypeId(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
+                >
+                  {productTypes.map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {previewConfig ? (
+              <PrintAreaEditor
+                mockupImageUrl={previewConfig.mockup_template_url}
+                testLegendUrl={previewUrl || undefined}
+                printArea={printArea}
+                padding={printPadding}
+                fitMode={printFitMode}
+                verticalBias={printVerticalBias}
+                onPrintAreaChange={setPrintArea}
+                onPaddingChange={setPrintPadding}
+                onFitModeChange={setPrintFitMode}
+                onVerticalBiasChange={setPrintVerticalBias}
+              />
+            ) : (
+              <p className="text-sm text-gray-500">
+                Nog geen product template voor dit producttype — maak die eerst aan onder Producten.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex gap-3 justify-end pt-4 border-t">
