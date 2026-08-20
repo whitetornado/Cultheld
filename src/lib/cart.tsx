@@ -30,6 +30,67 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const [itemCount, setItemCount] = useState(0);
   const { success, error: showError } = useToast();
 
+  // Cart rows are tied to session_id while browsing as a guest. If someone
+  // logs in (or creates an account) partway through — e.g. from the login
+  // banner on the Checkout page — refreshCart() switches to querying by
+  // user_id, and the guest's items would otherwise silently vanish from
+  // view even though the rows still exist under the old session_id. This
+  // claims those rows for the newly authenticated user instead, then merges
+  // any duplicates (same legend + variant already in their account cart).
+  const mergeGuestCartIntoUser = async (userId: string) => {
+    const sessionId = getSessionId();
+
+    // Claim guest rows for this browser session (NULL -> own user id).
+    // Update by session_id directly — authenticated users can't SELECT
+    // rows with user_id IS NULL under the existing view policy, but the
+    // claim UPDATE policy (20260820130000) allows this transition.
+    await supabase
+      .from('cart_items')
+      .update({ user_id: userId })
+      .eq('session_id', sessionId)
+      .is('user_id', null);
+
+    const { data: userItems } = await supabase
+      .from('cart_items')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (!userItems || userItems.length === 0) return;
+
+    const seen = new Map<string, string>();
+    for (const item of userItems) {
+      const key = `${item.legend_id}:${item.product_variant_id}`;
+      const existingId = seen.get(key);
+
+      if (!existingId) {
+        seen.set(key, item.id);
+        continue;
+      }
+
+      // Same product now appears twice (one was already in the account
+      // cart, one was just claimed from the guest session) — combine them
+      // into a single line item instead of showing a duplicate row.
+      const existing = userItems.find((i) => i.id === existingId);
+      if (existing) {
+        await supabase
+          .from('cart_items')
+          .update({ quantity: existing.quantity + item.quantity })
+          .eq('id', existing.id);
+        await supabase.from('cart_items').delete().eq('id', item.id);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        mergeGuestCartIntoUser(session.user.id).then(refreshCart);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   const refreshCart = async () => {
     const sessionId = getSessionId();
     const { data: { user } } = await supabase.auth.getUser();
