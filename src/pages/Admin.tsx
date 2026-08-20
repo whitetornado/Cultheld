@@ -562,7 +562,10 @@ function ClubsTab({
             )}
             <div className="flex-1 min-w-0">
               <div className="font-semibold truncate">{club.name}</div>
-              <div className="text-sm text-gray-600 truncate">{club.slug}</div>
+              <div className="text-sm text-gray-600 truncate">
+                {club.slug}
+                {club.city ? ` · ${club.city}` : ' · geen stad ingesteld'}
+              </div>
             </div>
             <div className="flex gap-1">
               <button
@@ -904,6 +907,7 @@ function ClubForm({
   const currentClub = clubs.find((c) => c.id === clubId);
   const [name, setName] = useState(currentClub?.name || '');
   const [slug, setSlug] = useState(currentClub?.slug || '');
+  const [city, setCity] = useState(currentClub?.city || '');
   const [logoUrl, setLogoUrl] = useState(currentClub?.logo_url || '');
   const [seasonId, setSeasonId] = useState(currentClub?.season_id || seasons[0]?.id || '');
   const [saving, setSaving] = useState(false);
@@ -930,6 +934,7 @@ function ClubForm({
     const data = {
       name,
       slug,
+      city: city || null,
       logo_url: logoUrl || null,
       season_id: seasonId,
     };
@@ -973,6 +978,20 @@ function ClubForm({
           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
           required
         />
+      </div>
+
+      <div>
+        <label className="block text-sm font-semibold mb-2">Stad</label>
+        <input
+          type="text"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          placeholder="bv. Amsterdam"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
+        />
+        <p className="text-sm text-gray-500 mt-1">
+          Gebruikt in de paginatitel en zoekmachine-omschrijving (bv. "Ajax shirt kopen – Amsterdam"). Laat leeg als niet van toepassing.
+        </p>
       </div>
 
       <div>
