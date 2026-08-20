@@ -8,7 +8,7 @@ import { Modal } from '../components/Modal';
 import { ImageUpload } from '../components/ImageUpload';
 import { LegendOnShirtPreview } from '../components/LegendOnShirtPreview';
 import { PrintAreaEditor } from '../components/PrintAreaEditor';
-import { uploadLegendImage, uploadShirtTemplate, uploadProductMockup } from '../lib/storage';
+import { uploadLegendImage, uploadShirtTemplate, uploadProductMockup, uploadClubLogo } from '../lib/storage';
 
 interface FAQItem {
   id: string;
@@ -910,6 +910,7 @@ function ClubForm({
   const [logoUrl, setLogoUrl] = useState(currentClub?.logo_url || '');
   const [seasonId, setSeasonId] = useState(currentClub?.season_id || seasons[0]?.id || '');
   const [saving, setSaving] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const { success, error } = useToast();
 
   const generateSlug = (text: string) => {
@@ -926,15 +927,39 @@ function ClubForm({
     }
   };
 
+  const handleLogoChange = (file: File | null, preview: string | null) => {
+    setUploadedFile(file);
+    if (!file) {
+      setLogoUrl('');
+    } else if (preview) {
+      setLogoUrl(preview);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+
+    let finalLogoUrl = currentClub?.logo_url || '';
+
+    if (uploadedFile) {
+      const uploadedUrl = await uploadClubLogo(uploadedFile);
+      if (uploadedUrl) {
+        finalLogoUrl = uploadedUrl;
+      } else {
+        error('Fout bij uploaden van logo');
+        setSaving(false);
+        return;
+      }
+    } else if (!logoUrl) {
+      finalLogoUrl = '';
+    }
 
     const data = {
       name,
       slug,
       city: city || null,
-      logo_url: logoUrl || null,
+      logo_url: finalLogoUrl || null,
       season_id: seasonId,
     };
 
@@ -994,15 +1019,13 @@ function ClubForm({
       </div>
 
       <div>
-        <label className="block text-sm font-semibold mb-2">Logo URL</label>
-        <input
-          type="url"
-          value={logoUrl}
-          onChange={(e) => setLogoUrl(e.target.value)}
-          placeholder="https://..."
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
+        <ImageUpload
+          label="Club logo"
+          currentImageUrl={currentClub?.logo_url || undefined}
+          onImageChange={handleLogoChange}
+          accept="image/png,image/jpeg,image/jpg,image/webp"
+          helpText="Upload het clublogo (max 5MB)"
         />
-        <p className="text-sm text-gray-500 mt-1">Voeg een externe afbeelding URL toe</p>
       </div>
 
       <div>

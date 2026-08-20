@@ -63,7 +63,28 @@ export async function uploadProductMockup(file: File): Promise<string | null> {
   return data.publicUrl;
 }
 
-export function deleteFileFromUrl(url: string, bucket: 'legends' | 'shirt-templates' | 'product-mockups') {
+export async function uploadClubLogo(file: File): Promise<string | null> {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+  const filePath = `${fileName}`;
+
+  const { error } = await supabase.storage
+    .from('club-logos')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+    });
+
+  if (error) {
+    console.error('Upload error:', error);
+    return null;
+  }
+
+  const { data } = supabase.storage.from('club-logos').getPublicUrl(filePath);
+  return data.publicUrl;
+}
+
+export function deleteFileFromUrl(url: string, bucket: 'legends' | 'shirt-templates' | 'product-mockups' | 'club-logos') {
   const path = url.split(`/${bucket}/`)[1];
   if (path) {
     return supabase.storage.from(bucket).remove([path]);
