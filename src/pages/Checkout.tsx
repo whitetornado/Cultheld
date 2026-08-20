@@ -15,8 +15,8 @@ export const Checkout = () => {
   const { items, clearCart } = useCart();
   const { error: showError, success: showSuccess } = useToast();
   const [processing, setProcessing] = useState(false);
-  const [orderComplete, setOrderComplete] = useState(false);
-  const [orderNumber, setOrderNumber] = useState('');
+  const [orderComplete] = useState(false);
+  const [orderNumber] = useState('');
   const [user, setUser] = useState<any>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');

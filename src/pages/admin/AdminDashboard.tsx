@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Package, Users, ShoppingBag, TrendingUp, Settings, ChevronRight, HelpCircle } from 'lucide-react';
+import { Package, Users, ShoppingBag, TrendingUp, ChevronRight, HelpCircle } from 'lucide-react';
 import { useRouter } from '../../lib/router';
 import { supabase, isAdmin } from '../../lib/supabase';
 

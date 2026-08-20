@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, Search, Mail, Phone, Package, TrendingUp } from 'lucide-react';
+import { Users, Search, Mail, Package, TrendingUp } from 'lucide-react';
 import { useRouter } from '../../lib/router';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../lib/toast';

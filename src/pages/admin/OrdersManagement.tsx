@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Package, Search, Filter, Eye, Truck, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Package, Search, Eye, Truck, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { useRouter } from '../../lib/router';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../lib/toast';

@@ -9,7 +9,6 @@ export const Header = () => {
   const { itemCount } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userIsAdmin, setUserIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -17,7 +16,6 @@ export const Header = () => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsLoggedIn(!!session);
-      setUserEmail(session?.user?.email || null);
 
       (async () => {
         if (session) {
@@ -35,7 +33,6 @@ export const Header = () => {
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     setIsLoggedIn(!!session);
-    setUserEmail(session?.user?.email || null);
     if (session) {
       const adminStatus = await isAdmin();
       setUserIsAdmin(adminStatus);

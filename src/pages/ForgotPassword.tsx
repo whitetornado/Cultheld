@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useRouter } from '../lib/router';
-import { supabase } from '../lib/supabase';
 import { useToast } from '../lib/toast';
 
 export const ForgotPassword = () => {

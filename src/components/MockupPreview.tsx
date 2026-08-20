@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { ZoomIn } from 'lucide-react';
-import { ProductConfig } from '../lib/types';
 import { Lightbox } from './Lightbox';
 
 interface MockupPreviewProps {

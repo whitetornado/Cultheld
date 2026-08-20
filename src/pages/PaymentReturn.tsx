@@ -15,7 +15,7 @@ export const PaymentReturn = () => {
   const [hasSession, setHasSession] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>({});
   const [pollCount, setPollCount] = useState(0);
-  const [checkStartTime, setCheckStartTime] = useState<number>(Date.now());
+  const [checkStartTime] = useState<number>(Date.now());
 
   const purchaseId = params.purchase_id;
   const token = params.token;

@@ -10,7 +10,7 @@ import { useSEO, breadcrumbJsonLd, SITE_URL } from '../lib/seo';
 const SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
 
 export const LegendDetail = () => {
-  const { navigate, params } = useRouter();
+  const { params } = useRouter();
   const { addToCart } = useCart();
   const [legend, setLegend] = useState<Legend | null>(null);
   const [club, setClub] = useState<Club | null>(null);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Phone, MapPin, Save, Loader, Package, Edit2 } from 'lucide-react';
+import { User, Phone, MapPin, Save, Loader, Package, Edit2 } from 'lucide-react';
 import { useRouter } from '../lib/router';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../lib/toast';

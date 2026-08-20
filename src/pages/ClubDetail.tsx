@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, ArrowRight } from 'lucide-react';
 import { useRouter } from '../lib/router';
 import { supabase } from '../lib/supabase';
-import { Season, Club, Legend, LegendAssignment } from '../lib/types';
+import { Season, Club, Legend } from '../lib/types';
 import { useSEO, breadcrumbJsonLd } from '../lib/seo';
 
 export const ClubDetail = () => {

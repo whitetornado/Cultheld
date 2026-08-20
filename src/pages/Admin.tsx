@@ -24,7 +24,7 @@ export const Admin = () => {
   const [hasAccess, setHasAccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('seasons');
-  const { success, error: showError, info } = useToast();
+  const { success, error: showError } = useToast();
 
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
@@ -310,7 +310,6 @@ export const Admin = () => {
               <ProductConfigsTab
                 configs={productConfigs}
                 productTypes={productTypes}
-                legends={legends}
                 onEdit={openEditModal}
                 onCopy={copyTemplate}
                 onDelete={(id) => confirmDelete(id, 'product_configs')}
@@ -1060,7 +1059,7 @@ function LegendForm({
   );
   const [clubId, setClubId] = useState(currentLegend?.club_id || clubs[0]?.id || '');
   const [seasonId, setSeasonId] = useState<string>('');
-  const [pngUrl, setPngUrl] = useState(currentLegend?.png_url || '');
+  const [pngUrl] = useState(currentLegend?.png_url || '');
   const [bio, setBio] = useState(currentLegend?.bio || '');
   const [saving, setSaving] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -1648,7 +1647,7 @@ function ShirtTemplateForm({
   const [blendMode, setBlendMode] = useState(templateData?.blend_mode || 'multiply');
   const [sortOrder, setSortOrder] = useState(templateData?.sort_order.toString() || '0');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(templateData?.template_url || null);
+  const [, setPreviewUrl] = useState<string | null>(templateData?.template_url || null);
   const [saving, setSaving] = useState(false);
   const { success, error } = useToast();
 
@@ -1848,14 +1847,12 @@ function ShirtTemplateForm({
 function ProductConfigsTab({
   configs,
   productTypes,
-  legends,
   onEdit,
   onDelete,
   onCopy,
 }: {
   configs: ProductConfig[];
   productTypes: ProductType[];
-  legends: Legend[];
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onCopy: (id: string) => void;
@@ -1970,7 +1967,7 @@ function ProductConfigForm({
   const [productTypeId, setProductTypeId] = useState(configData?.product_type_id || productTypes[0]?.id || '');
   const [colorName, setColorName] = useState(configData ? (copyingConfig ? `${configData.color_name} (kopie)` : configData.color_name) : '');
   const [colorHex, setColorHex] = useState(configData?.color_hex || '#FFFFFF');
-  const [mockupTemplateUrl, setMockupTemplateUrl] = useState(configData?.mockup_template_url || '');
+  const [mockupTemplateUrl] = useState(configData?.mockup_template_url || '');
   const [blendMode, setBlendMode] = useState(configData?.blend_mode || 'multiply');
   const [isDefault, setIsDefault] = useState(copyingConfig ? false : (currentConfig?.is_default || false));
   const [sortOrder, setSortOrder] = useState(configData?.sort_order?.toString() || '0');
