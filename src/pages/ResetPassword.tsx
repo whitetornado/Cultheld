@@ -154,7 +154,15 @@ export const ResetPassword = () => {
       }, 2000);
     } catch (err) {
       console.error('Reset password error:', err);
-      error('Fout bij wijzigen wachtwoord');
+
+      const message = err instanceof Error ? err.message : '';
+      if (/different from the old password/i.test(message)) {
+        error('Dit is hetzelfde wachtwoord als je huidige. Kies een ander wachtwoord.');
+      } else if (/password.*at least|password.*characters/i.test(message)) {
+        error('Wachtwoord voldoet niet aan de eisen. Kies een ander wachtwoord.');
+      } else {
+        error('Fout bij wijzigen wachtwoord');
+      }
     } finally {
       setLoading(false);
     }
