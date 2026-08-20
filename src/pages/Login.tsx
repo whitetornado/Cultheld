@@ -79,27 +79,28 @@ export const Login = () => {
     setRegisterError(null);
 
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: registerEmail,
-        password: registerPassword,
-        options: {
-          data: { full_name: registerName },
+      // Account creation runs through our own edge function instead of
+      // supabase.auth.signUp() directly, so the confirmation mail is our
+      // branded Resend email instead of Supabase's generic default one.
+      const { data, error: signUpError } = await supabase.functions.invoke('send-signup-confirmation', {
+        body: {
+          email: registerEmail,
+          password: registerPassword,
+          name: registerName,
         },
       });
 
       if (signUpError) {
         throw signUpError;
       }
-
-      if (data.session) {
-        // Email confirmation is disabled — the account is active right away.
-        await afterAuth();
-      } else {
-        // Email confirmation required — no session yet, ask the customer to
-        // check their inbox instead of leaving them on a form that "did
-        // nothing".
-        setRegisterCheckEmail(true);
+      if (data?.success === false) {
+        throw new Error(data.error || 'Er is een fout opgetreden bij het aanmaken van je account');
       }
+
+      // The account is created unconfirmed — no session yet, so ask the
+      // customer to check their inbox instead of leaving them on a form
+      // that appears to have done nothing.
+      setRegisterCheckEmail(true);
     } catch (err) {
       console.error('Register error:', err);
       setRegisterError(err instanceof Error ? err.message : 'Er is een fout opgetreden bij het aanmaken van je account');

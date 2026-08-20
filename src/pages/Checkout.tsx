@@ -133,25 +133,24 @@ export const Checkout = () => {
     setIsRegistering(true);
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: registerEmail,
-        password: registerPassword,
-        options: {
-          data: { name: registerName },
+      // Account creation runs through our own edge function instead of
+      // supabase.auth.signUp() directly, so the confirmation mail is our
+      // branded Resend email instead of Supabase's generic default one.
+      const { data, error } = await supabase.functions.invoke('send-signup-confirmation', {
+        body: {
+          email: registerEmail,
+          password: registerPassword,
+          name: registerName,
         },
       });
 
       if (error) throw error;
+      if (data?.success === false) throw new Error(data.error || 'Fout bij account aanmaken');
 
-      if (data.session && data.user) {
-        // Email confirmation is off — the account is active immediately.
-        showSuccess('Account aangemaakt! Je bent ingelogd.');
-        await applyLoggedInUser(data.user);
-      } else {
-        // Email confirmation is required before a session exists — the
-        // customer can still finish this order as a guest in the meantime.
-        setRegisterCheckEmail(true);
-      }
+      // The account is created unconfirmed — there's no session yet, so the
+      // customer confirms via email and can finish this order as a guest
+      // in the meantime.
+      setRegisterCheckEmail(true);
     } catch (err: any) {
       console.error('Register error:', err);
       showError(err.message || 'Fout bij account aanmaken');
