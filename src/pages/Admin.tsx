@@ -627,7 +627,11 @@ function LegendsTab({
             <div className="p-4">
               <div className="font-semibold mb-1">{legend.name}</div>
               <div className="text-sm text-gray-600 mb-3">
-                {legend.category === 'eredivisie' ? 'Eredivisie' : 'Wereldlegend'}
+                {legend.category === 'eredivisie'
+                  ? 'Eredivisie'
+                  : legend.category === 'design'
+                  ? 'Design'
+                  : 'Wereldlegend'}
               </div>
               <div className="flex gap-2">
                 <button
@@ -1077,7 +1081,7 @@ function LegendForm({
   const currentLegend = legends.find((l) => l.id === legendId);
   const [name, setName] = useState(currentLegend?.name || '');
   const [slug, setSlug] = useState(currentLegend?.slug || '');
-  const [category, setCategory] = useState<'eredivisie' | 'world'>(
+  const [category, setCategory] = useState<'eredivisie' | 'world' | 'design'>(
     currentLegend?.category || 'eredivisie'
   );
   const [clubId, setClubId] = useState(currentLegend?.club_id || clubs[0]?.id || '');
@@ -1164,12 +1168,21 @@ function LegendForm({
       return;
     }
 
+    // A 'design' has no club/season — the Club, All-time and Seizoen fields
+    // are hidden for it in the form above, but clubId/seasonId still hold
+    // their leftover default values (first club, active season) from state
+    // initialization. Force them out here so a design never silently gets a
+    // club_id or a legend_assignments row.
+    const effectiveClubId = category === 'design' ? '' : clubId;
+    const effectiveSeasonId = category === 'design' ? '' : seasonId;
+    const effectiveAllTime = category === 'design' ? false : allTime;
+
     const data = {
       name,
       slug,
       category,
-      club_id: clubId || null,
-      all_time: allTime,
+      club_id: effectiveClubId || null,
+      all_time: effectiveAllTime,
       png_url: finalPngUrl,
       bio,
     };
@@ -1192,7 +1205,7 @@ function LegendForm({
       return;
     }
 
-    if (clubId && seasonId && insertedLegendId) {
+    if (effectiveClubId && effectiveSeasonId && insertedLegendId) {
       // Check if assignment already exists
       const { data: existingAssignment } = await supabase
         .from('legend_assignments')
@@ -1272,81 +1285,95 @@ function LegendForm({
             <label className="block text-sm font-semibold mb-2">Categorie</label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value as 'eredivisie' | 'world')}
+              onChange={(e) => setCategory(e.target.value as 'eredivisie' | 'world' | 'design')}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
             >
               <option value="eredivisie">Eredivisie</option>
               <option value="world">Wereldlegend</option>
+              <option value="design">Design (los van een legend)</option>
             </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold mb-2">
-              Club {category === 'eredivisie' && <span className="text-red-500">*</span>}
-            </label>
-            <select
-              value={clubId}
-              onChange={(e) => setClubId(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
-              required={category === 'eredivisie'}
-            >
-              <option value="">Selecteer club</option>
-              {clubs.map((club) => (
-                <option key={club.id} value={club.id}>
-                  {club.name}
-                </option>
-              ))}
-            </select>
-            {category === 'eredivisie' && (
+            {category === 'design' && (
               <p className="text-sm text-gray-500 mt-1">
-                Verplicht voor Eredivisie legends
+                Verschijnt op de aparte "Designs" pagina, los van club en seizoen.
               </p>
             )}
           </div>
 
-          <div className="flex items-start gap-2">
-            <input
-              type="checkbox"
-              id="allTime"
-              checked={allTime}
-              onChange={(e) => setAllTime(e.target.checked)}
-              className="w-4 h-4 mt-1"
-            />
-            <label htmlFor="allTime" className="text-sm">
-              <span className="font-semibold">All-time legend</span>
-              <p className="text-gray-500">
-                Los van seizoen zichtbaar op de club- en stadpagina (bv. "Ajax all-time culthelden")
-              </p>
-            </label>
-          </div>
+          {category !== 'design' && (
+            <div>
+              <label className="block text-sm font-semibold mb-2">
+                Club {category === 'eredivisie' && <span className="text-red-500">*</span>}
+              </label>
+              <select
+                value={clubId}
+                onChange={(e) => setClubId(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
+                required={category === 'eredivisie'}
+              >
+                <option value="">Selecteer club</option>
+                {clubs.map((club) => (
+                  <option key={club.id} value={club.id}>
+                    {club.name}
+                  </option>
+                ))}
+              </select>
+              {category === 'eredivisie' && (
+                <p className="text-sm text-gray-500 mt-1">
+                  Verplicht voor Eredivisie legends
+                </p>
+              )}
+            </div>
+          )}
+
+          {category !== 'design' && (
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                id="allTime"
+                checked={allTime}
+                onChange={(e) => setAllTime(e.target.checked)}
+                className="w-4 h-4 mt-1"
+              />
+              <label htmlFor="allTime" className="text-sm">
+                <span className="font-semibold">All-time legend</span>
+                <p className="text-gray-500">
+                  Los van seizoen zichtbaar op de club- en stadpagina (bv. "Ajax all-time culthelden")
+                </p>
+              </label>
+            </div>
+          )}
+
+          {category !== 'design' && (
+            <div>
+              <label className="block text-sm font-semibold mb-2">
+                Seizoen {category === 'eredivisie' && <span className="text-red-500">*</span>}
+              </label>
+              <select
+                value={seasonId}
+                onChange={(e) => setSeasonId(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
+                disabled={category === 'world'}
+                required={category === 'eredivisie'}
+              >
+                <option value="">Selecteer seizoen</option>
+                {seasons.map((season) => (
+                  <option key={season.id} value={season.id}>
+                    {season.name} {season.is_active && '(Actief)'}
+                  </option>
+                ))}
+              </select>
+              {category === 'eredivisie' && (
+                <p className="text-sm text-gray-500 mt-1">
+                  Verplicht voor Eredivisie legends
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-semibold mb-2">
-              Seizoen {category === 'eredivisie' && <span className="text-red-500">*</span>}
+              {category === 'design' ? 'Beschrijving' : 'Bio'}
             </label>
-            <select
-              value={seasonId}
-              onChange={(e) => setSeasonId(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
-              disabled={category === 'world'}
-              required={category === 'eredivisie'}
-            >
-              <option value="">Selecteer seizoen</option>
-              {seasons.map((season) => (
-                <option key={season.id} value={season.id}>
-                  {season.name} {season.is_active && '(Actief)'}
-                </option>
-              ))}
-            </select>
-            {category === 'eredivisie' && (
-              <p className="text-sm text-gray-500 mt-1">
-                Verplicht voor Eredivisie legends
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold mb-2">Bio</label>
             <textarea
               value={bio}
               onChange={(e) => setBio(e.target.value)}

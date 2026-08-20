@@ -24,7 +24,7 @@ export interface Legend {
   slug: string;
   bio: string;
   png_url: string;
-  category: 'eredivisie' | 'world';
+  category: 'eredivisie' | 'world' | 'design';
   club_id: string | null;
   all_time: boolean;
   created_at: string;

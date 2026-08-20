@@ -84,6 +84,12 @@ export const Header = () => {
               Legends
             </button>
             <button
+              onClick={() => navigate('/designs')}
+              className="hover:text-gray-300 transition-colors"
+            >
+              Designs
+            </button>
+            <button
               onClick={() => navigate('/faq')}
               className="hover:text-gray-300 transition-colors"
             >
@@ -167,6 +173,15 @@ export const Header = () => {
               className="block w-full text-left py-2 hover:text-gray-300 transition-colors"
             >
               Legends
+            </button>
+            <button
+              onClick={() => {
+                navigate('/designs');
+                setMobileMenuOpen(false);
+              }}
+              className="block w-full text-left py-2 hover:text-gray-300 transition-colors"
+            >
+              Designs
             </button>
             <button
               onClick={() => {

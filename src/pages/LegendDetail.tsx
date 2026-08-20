@@ -152,7 +152,9 @@ export const LegendDetail = () => {
     jsonLd: legend ? [
       breadcrumbJsonLd([
         { name: 'Home', path: '/' },
-        { name: legend.category === 'world' ? 'Wereldlegends' : 'Legends', path: '/legends' },
+        legend.category === 'design'
+          ? { name: 'Designs', path: '/designs' }
+          : { name: legend.category === 'world' ? 'Wereldlegends' : 'Legends', path: '/legends' },
         { name: legend.name, path },
       ]),
       {

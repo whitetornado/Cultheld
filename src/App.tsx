@@ -11,6 +11,7 @@ import { ClubDetail } from './pages/ClubDetail';
 import { ClubAllTime } from './pages/ClubAllTime';
 import { CityDetail } from './pages/CityDetail';
 import { Legends } from './pages/Legends';
+import { Designs } from './pages/Designs';
 import { LegendDetail } from './pages/LegendDetail';
 import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
@@ -94,6 +95,7 @@ function App() {
             <Route path="/club/:clubSlug" component={ClubAllTime} />
             <Route path="/stad/:citySlug" component={CityDetail} />
             <Route path="/legends" component={Legends} />
+            <Route path="/designs" component={Designs} />
             <Route path="/legend/:legendSlug" component={LegendDetail} />
             <Route path="/cart" component={Cart} />
             <Route path="/checkout" component={Checkout} />

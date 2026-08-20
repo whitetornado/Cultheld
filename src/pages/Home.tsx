@@ -9,6 +9,7 @@ export const Home = () => {
   const { navigate } = useRouter();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [globalLegends, setGlobalLegends] = useState<Legend[]>([]);
+  const [designs, setDesigns] = useState<Legend[]>([]);
   const [loading, setLoading] = useState(true);
 
   useSEO({
@@ -29,9 +30,10 @@ export const Home = () => {
   }, []);
 
   const loadData = async () => {
-    const [seasonsRes, legendsRes] = await Promise.all([
+    const [seasonsRes, legendsRes, designsRes] = await Promise.all([
       supabase.from('seasons').select('*').order('start_year', { ascending: false }),
       supabase.from('legends').select('*').eq('category', 'world').limit(3),
+      supabase.from('legends').select('*').eq('category', 'design').limit(3),
     ]);
 
     if (seasonsRes.data) {
@@ -44,6 +46,7 @@ export const Home = () => {
       setSeasons(sortedSeasons);
     }
     if (legendsRes.data) setGlobalLegends(legendsRes.data);
+    if (designsRes.data) setDesigns(designsRes.data);
     setLoading(false);
   };
 
@@ -212,6 +215,45 @@ export const Home = () => {
                   <div className="p-6">
                     <h3 className="text-xl font-bold mb-2">{legend.name}</h3>
                     <p className="text-gray-600 text-sm line-clamp-2">{legend.bio}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {!loading && designs.length > 0 && (
+        <section className="py-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-3xl md:text-4xl font-bold">Designs</h2>
+              <button
+                onClick={() => navigate('/designs')}
+                className="text-black hover:underline font-semibold flex items-center gap-2"
+              >
+                Alle designs
+                <ArrowRight size={20} />
+              </button>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {designs.map((design) => (
+                <button
+                  key={design.id}
+                  onClick={() => navigate(`/legend/${design.slug}`)}
+                  className="group bg-white rounded-lg overflow-hidden hover:shadow-xl transition-all border border-gray-100"
+                >
+                  <div className="aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
+                    <img
+                      src={design.png_url}
+                      alt={design.name}
+                      className="w-full h-full object-contain group-hover:scale-105 transition-transform"
+                    />
+                  </div>
+                  <div className="p-6">
+                    <h3 className="text-xl font-bold mb-2">{design.name}</h3>
+                    <p className="text-gray-600 text-sm line-clamp-2">{design.bio}</p>
                   </div>
                 </button>
               ))}
