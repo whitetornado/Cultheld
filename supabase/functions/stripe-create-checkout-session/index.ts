@@ -156,7 +156,10 @@ Deno.serve(async (req: Request) => {
     }
 
     const successUrl = `${appBaseUrl}/payment/return?purchase_id=${purchase_id}&token=${return_token}&session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = `${appBaseUrl}/checkout`;
+    // Send a cancelled checkout to the same status page (instead of back to
+    // an empty /checkout) so the customer sees a clear "cancelled" state and
+    // can pick up their still-filled cart from there.
+    const cancelUrl = `${appBaseUrl}/payment/return?purchase_id=${purchase_id}&token=${return_token}&canceled=true`;
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
