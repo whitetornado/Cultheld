@@ -16,7 +16,7 @@ import { createClient } from '@supabase/supabase-js';
 function loadDotEnv() {
   if (!existsSync('.env')) return;
   let content = readFileSync('.env', 'utf-8');
-  // Strip a leading UTF-8 BOM - PowerShell's Set-Content/Out-File often add
+  // Strip a leading UTF-8 BOM — PowerShell's Set-Content/Out-File often add
   // one, which would otherwise silently corrupt the first variable name.
   if (content.charCodeAt(0) === 0xfeff) {
     content = content.slice(1);
@@ -62,6 +62,17 @@ function seasonSlug(season) {
   return `${season.start_year}-${season.end_year}`;
 }
 
+// Mirrors src/lib/slug.ts — kept as a plain copy here since this build
+// script runs under plain Node, not through the Vite/TS toolchain.
+function slugify(text) {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
 async function main() {
   const entries = STATIC_PAGES.map((p) => urlEntry(p.path, p.priority, p.changefreq));
 
@@ -76,8 +87,8 @@ async function main() {
 
       const [{ data: seasons }, { data: clubs }, { data: legends }, { data: assignments }] = await Promise.all([
         supabase.from('seasons').select('start_year, end_year'),
-        supabase.from('clubs').select('id, slug'),
-        supabase.from('legends').select('slug'),
+        supabase.from('clubs').select('id, slug, city'),
+        supabase.from('legends').select('slug, club_id, all_time'),
         supabase.from('legend_assignments').select('season_id, club_id, seasons(start_year, end_year), clubs(slug)'),
       ]);
 
@@ -100,7 +111,28 @@ async function main() {
         entries.push(urlEntry(`/legend/${legend.slug}`, '0.7', 'weekly'));
       });
 
-      console.log(`[sitemap] ${(seasons || []).length} seasons, ${seenClubPages.size} club pages, ${(legends || []).length} legends`);
+      // All-time club/city pages only exist (and are worth indexing) once at
+      // least one legend has been marked all-time for that club.
+      const allTimeClubIds = new Set(
+        (legends || []).filter((l) => l.all_time && l.club_id).map((l) => l.club_id)
+      );
+
+      let allTimeClubPages = 0;
+      const citySlugs = new Set();
+      (clubs || []).forEach((club) => {
+        if (!allTimeClubIds.has(club.id)) return;
+        entries.push(urlEntry(`/club/${club.slug}`, '0.6', 'weekly'));
+        allTimeClubPages++;
+        if (club.city) {
+          const citySlug = slugify(club.city);
+          if (!citySlugs.has(citySlug)) {
+            citySlugs.add(citySlug);
+            entries.push(urlEntry(`/stad/${citySlug}`, '0.6', 'weekly'));
+          }
+        }
+      });
+
+      console.log(`[sitemap] ${(seasons || []).length} seasons, ${seenClubPages.size} club pages, ${(legends || []).length} legends, ${allTimeClubPages} all-time club pages, ${citySlugs.size} city pages`);
     } catch (err) {
       console.warn('[sitemap] Failed to fetch from Supabase, generating static-only sitemap:', err.message);
     }

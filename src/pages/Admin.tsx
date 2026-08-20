@@ -1081,6 +1081,7 @@ function LegendForm({
     currentLegend?.category || 'eredivisie'
   );
   const [clubId, setClubId] = useState(currentLegend?.club_id || clubs[0]?.id || '');
+  const [allTime, setAllTime] = useState(currentLegend?.all_time || false);
   const [seasonId, setSeasonId] = useState<string>('');
   const [pngUrl] = useState(currentLegend?.png_url || '');
   const [bio, setBio] = useState(currentLegend?.bio || '');
@@ -1168,6 +1169,7 @@ function LegendForm({
       slug,
       category,
       club_id: clubId || null,
+      all_time: allTime,
       png_url: finalPngUrl,
       bio,
     };
@@ -1300,6 +1302,22 @@ function LegendForm({
                 Verplicht voor Eredivisie legends
               </p>
             )}
+          </div>
+
+          <div className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              id="allTime"
+              checked={allTime}
+              onChange={(e) => setAllTime(e.target.checked)}
+              className="w-4 h-4 mt-1"
+            />
+            <label htmlFor="allTime" className="text-sm">
+              <span className="font-semibold">All-time legend</span>
+              <p className="text-gray-500">
+                Los van seizoen zichtbaar op de club- en stadpagina (bv. "Ajax all-time culthelden")
+              </p>
+            </label>
           </div>
 
           <div>

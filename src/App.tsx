@@ -8,6 +8,8 @@ import { Home } from './pages/Home';
 import { Seasons } from './pages/Seasons';
 import { SeasonDetail } from './pages/SeasonDetail';
 import { ClubDetail } from './pages/ClubDetail';
+import { ClubAllTime } from './pages/ClubAllTime';
+import { CityDetail } from './pages/CityDetail';
 import { Legends } from './pages/Legends';
 import { LegendDetail } from './pages/LegendDetail';
 import { Cart } from './pages/Cart';
@@ -89,6 +91,8 @@ function App() {
             <Route path="/seizoenen" component={Seasons} />
             <Route path="/seizoen/:seasonSlug" component={SeasonDetail} />
             <Route path="/seizoen/:seasonSlug/club/:clubSlug" component={ClubDetail} />
+            <Route path="/club/:clubSlug" component={ClubAllTime} />
+            <Route path="/stad/:citySlug" component={CityDetail} />
             <Route path="/legends" component={Legends} />
             <Route path="/legend/:legendSlug" component={LegendDetail} />
             <Route path="/cart" component={Cart} />

@@ -45,6 +45,10 @@ export const Router = ({ children }: { children: ReactNode }) => {
       if (parts[2] === 'club' && parts[3]) {
         newParams.clubSlug = parts[3];
       }
+    } else if (parts[0] === 'club' && parts[1]) {
+      newParams.clubSlug = parts[1];
+    } else if (parts[0] === 'stad' && parts[1]) {
+      newParams.citySlug = parts[1];
     } else if (parts[0] === 'legend' && parts[1]) {
       newParams.legendSlug = parts[1];
     } else if (parts[0] === 'admin') {

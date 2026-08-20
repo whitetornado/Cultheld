@@ -2,59 +2,44 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, ArrowRight } from 'lucide-react';
 import { useRouter } from '../lib/router';
 import { supabase } from '../lib/supabase';
-import { Season, Club, Legend } from '../lib/types';
+import { Club, Legend } from '../lib/types';
 import { useSEO, breadcrumbJsonLd } from '../lib/seo';
 import { slugify } from '../lib/slug';
 
-export const ClubDetail = () => {
+// Season-independent club page: shows the legends marked "all-time" for
+// this club, regardless of which season(s) they were actually assigned to.
+// Complements SeasonDetail -> ClubDetail (which stays scoped to one season).
+export const ClubAllTime = () => {
   const { navigate, params } = useRouter();
-  const [season, setSeason] = useState<Season | null>(null);
   const [club, setClub] = useState<Club | null>(null);
   const [legends, setLegends] = useState<Legend[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (params.seasonSlug && params.clubSlug) {
-      loadClubLegends();
+    if (params.clubSlug) {
+      loadClub();
     }
-  }, [params.seasonSlug, params.clubSlug]);
+  }, [params.clubSlug]);
 
-  const loadClubLegends = async () => {
-    const [startYear, endYear] = params.seasonSlug.split('-');
-
-    const { data: seasonData } = await supabase
-      .from('seasons')
-      .select('*')
-      .eq('start_year', parseInt(startYear))
-      .eq('end_year', parseInt(endYear))
-      .single();
-
+  const loadClub = async () => {
     const { data: clubData } = await supabase
       .from('clubs')
       .select('*')
       .eq('slug', params.clubSlug)
       .single();
 
-    if (seasonData && clubData) {
-      setSeason(seasonData);
+    if (clubData) {
       setClub(clubData);
 
-      const { data: assignments } = await supabase
-        .from('legend_assignments')
-        .select('legend_id')
-        .eq('season_id', seasonData.id)
-        .eq('club_id', clubData.id);
+      const { data: legendsData } = await supabase
+        .from('legends')
+        .select('*')
+        .eq('club_id', clubData.id)
+        .eq('all_time', true)
+        .order('name');
 
-      if (assignments && assignments.length > 0) {
-        const legendIds = assignments.map((a) => a.legend_id);
-        const { data: legendsData } = await supabase
-          .from('legends')
-          .select('*')
-          .in('id', legendIds);
-
-        if (legendsData) {
-          setLegends(legendsData);
-        }
+      if (legendsData) {
+        setLegends(legendsData);
       }
     }
 
@@ -62,31 +47,36 @@ export const ClubDetail = () => {
   };
 
   const cityLabel = club?.city ? ` ${club.city}` : '';
-  const path = `/seizoen/${params.seasonSlug || ''}/club/${params.clubSlug || ''}`;
+  const path = `/club/${params.clubSlug || ''}`;
 
   useSEO({
-    title: club ? `${club.name} shirt kopen${cityLabel ? ` – ${club.city}` : ''}` : 'Club',
-    description: club && season
-      ? `Voetbalshirt van ${club.name}${cityLabel} met jouw favoriete cultheld erop. Kies uit de legends van ${club.name} (seizoen ${season.name}) en druk 'm op een premium t-shirt, hoodie of sweater.`
+    title: club
+      ? `${club.name} all-time shirt kopen${cityLabel ? ` – ${club.city}` : ''}`
+      : 'Club',
+    description: club
+      ? `De all-time culthelden van ${club.name}${cityLabel}, los van seizoen. Kies jouw favoriete legende en druk 'm op een premium t-shirt, hoodie of sweater.`
       : 'Voetbalshirt met jouw favoriete cultheld erop, bij Cultheld.',
     path,
     image: club?.logo_url || undefined,
-    noindex: !loading && (!season || !club),
-    jsonLd: club && season ? [
-      breadcrumbJsonLd([
-        { name: 'Home', path: '/' },
-        { name: 'Seizoenen', path: '/seizoenen' },
-        { name: season.name, path: `/seizoen/${params.seasonSlug}` },
-        { name: club.name, path },
-      ]),
-      {
-        '@context': 'https://schema.org',
-        '@type': 'CollectionPage',
-        name: `${club.name} culthelden${cityLabel}`,
-        description: `Culthelden van ${club.name}${cityLabel} om op een shirt te zetten.`,
-        ...(club.city ? { about: { '@type': 'City', name: club.city } } : {}),
-      },
-    ] : undefined,
+    noindex: !loading && (!club || legends.length === 0),
+    jsonLd: club
+      ? [
+          breadcrumbJsonLd([
+            { name: 'Home', path: '/' },
+            ...(club.city
+              ? [{ name: club.city, path: `/stad/${slugify(club.city)}` }]
+              : []),
+            { name: club.name, path },
+          ]),
+          {
+            '@context': 'https://schema.org',
+            '@type': 'CollectionPage',
+            name: `${club.name} all-time culthelden${cityLabel}`,
+            description: `All-time culthelden van ${club.name}${cityLabel} om op een shirt te zetten.`,
+            ...(club.city ? { about: { '@type': 'City', name: club.city } } : {}),
+          },
+        ]
+      : undefined,
   });
 
   if (loading) {
@@ -97,7 +87,7 @@ export const ClubDetail = () => {
     );
   }
 
-  if (!season || !club) {
+  if (!club) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -117,11 +107,11 @@ export const ClubDetail = () => {
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <button
-          onClick={() => navigate(`/seizoen/${params.seasonSlug}`)}
+          onClick={() => navigate('/seizoenen')}
           className="flex items-center gap-2 text-gray-600 hover:text-black mb-8 transition-colors"
         >
           <ChevronLeft size={20} />
-          Terug naar clubs
+          Terug naar seizoenen
         </button>
 
         <div className="mb-12 flex items-center gap-6">
@@ -136,31 +126,27 @@ export const ClubDetail = () => {
           )}
           <div>
             <h1 className="text-4xl md:text-5xl font-bold mb-2">{club.name}</h1>
-            <p className="text-xl text-gray-600">Seizoen {season.name}</p>
+            <p className="text-xl text-gray-600">
+              All-time culthelden
+              {club.city && (
+                <>
+                  {' · '}
+                  <button
+                    onClick={() => navigate(`/stad/${slugify(club.city!)}`)}
+                    className="underline hover:text-black"
+                  >
+                    {club.city}
+                  </button>
+                </>
+              )}
+            </p>
           </div>
-        </div>
-
-        <div className="mb-8 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-          <button
-            onClick={() => navigate(`/club/${club.slug}`)}
-            className="text-gray-600 hover:text-black underline"
-          >
-            Bekijk all-time culthelden van {club.name}
-          </button>
-          {club.city && (
-            <button
-              onClick={() => navigate(`/stad/${slugify(club.city!)}`)}
-              className="text-gray-600 hover:text-black underline"
-            >
-              Meer culthelden uit {club.city}
-            </button>
-          )}
         </div>
 
         {legends.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-gray-600">
-              Nog geen culthelden beschikbaar voor deze club in dit seizoen
+              Nog geen all-time culthelden ingesteld voor {club.name}
             </p>
           </div>
         ) : (
