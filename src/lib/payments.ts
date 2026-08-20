@@ -56,7 +56,7 @@ export interface Payment {
   purchase_id: string;
   stripe_checkout_session_id: string | null;
   stripe_payment_intent_id: string | null;
-  checkout_url: string;
+  checkout_url: string | null;
   amount_value: string;
   currency: string;
   status: string;
@@ -98,7 +98,7 @@ export async function createPurchase(params: CreatePurchaseParams): Promise<{ pu
   return { purchase: data.purchase, return_token: data.return_token };
 }
 
-export async function createStripeCheckout(purchaseId: string, returnToken: string): Promise<{ payment: Payment; checkout_url: string }> {
+export async function createStripeCheckout(purchaseId: string, returnToken: string): Promise<{ payment: Payment; client_secret: string }> {
   const { data, error } = await supabase.functions.invoke('stripe-create-checkout-session', {
     body: { purchase_id: purchaseId, return_token: returnToken },
   });
@@ -108,7 +108,7 @@ export async function createStripeCheckout(purchaseId: string, returnToken: stri
     throw new Error(error.message || 'Failed to create payment');
   }
 
-  if (!data || !data.checkout_url) {
+  if (!data || !data.client_secret) {
     throw new Error('Invalid response from server');
   }
 

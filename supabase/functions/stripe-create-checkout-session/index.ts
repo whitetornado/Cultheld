@@ -99,14 +99,28 @@ Deno.serve(async (req: Request) => {
       .in('status', ['open', 'pending', 'unpaid'])
       .maybeSingle();
 
-    if (existingPayment && existingPayment.checkout_url) {
-      return new Response(
-        JSON.stringify({
-          payment: existingPayment,
-          checkout_url: existingPayment.checkout_url,
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Embedded Checkout's client_secret is short-lived and isn't persisted —
+    // re-fetch it from Stripe on every resume instead of storing it. If the
+    // session has since expired or completed, fall through and create a
+    // fresh one below.
+    if (existingPayment && existingPayment.stripe_checkout_session_id) {
+      try {
+        const existingSession = await stripe.checkout.sessions.retrieve(
+          existingPayment.stripe_checkout_session_id
+        );
+
+        if (existingSession.status === 'open' && existingSession.client_secret) {
+          return new Response(
+            JSON.stringify({
+              payment: existingPayment,
+              client_secret: existingSession.client_secret,
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } catch (err) {
+        console.warn('Could not retrieve existing Stripe session, creating a new one:', err);
+      }
     }
 
     await supabase.from('purchases').update({ status: 'pending_payment' }).eq('id', purchase_id);
@@ -155,18 +169,19 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const successUrl = `${appBaseUrl}/payment/return?purchase_id=${purchase_id}&token=${return_token}&session_id={CHECKOUT_SESSION_ID}`;
-    // Send a cancelled checkout to the same status page (instead of back to
-    // an empty /checkout) so the customer sees a clear "cancelled" state and
-    // can pick up their still-filled cart from there.
-    const cancelUrl = `${appBaseUrl}/payment/return?purchase_id=${purchase_id}&token=${return_token}&canceled=true`;
+    // Embedded Checkout keeps the customer on cultheld.nl the whole time —
+    // there is no separate hosted page to redirect away to, so there's also
+    // no cancel_url: "cancelling" just means the customer closes/leaves the
+    // embedded form on our own page, which we handle entirely client-side.
+    // return_url is only used once payment actually completes.
+    const returnUrl = `${appBaseUrl}/payment/return?purchase_id=${purchase_id}&token=${return_token}&session_id={CHECKOUT_SESSION_ID}`;
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      ui_mode: 'embedded',
       line_items: lineItems,
       customer_email: purchase.customer_email,
-      success_url: successUrl,
-      cancel_url: cancelUrl,
+      return_url: returnUrl,
       metadata: { purchase_id },
       payment_intent_data: { metadata: { purchase_id } },
     });
@@ -181,7 +196,7 @@ Deno.serve(async (req: Request) => {
       .insert({
         purchase_id,
         stripe_checkout_session_id: session.id,
-        checkout_url: session.url,
+        checkout_url: session.url ?? '',
         amount_value: purchase.amount_value,
         currency: purchase.currency,
         status: session.payment_status === 'paid' ? 'paid' : 'open',
@@ -199,7 +214,7 @@ Deno.serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ payment, checkout_url: session.url }),
+      JSON.stringify({ payment, client_secret: session.client_secret }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {

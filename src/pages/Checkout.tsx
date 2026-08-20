@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, CheckCircle, LogIn, User, X } from 'lucide-react';
+import { ChevronLeft, LogIn, UserPlus, User, X } from 'lucide-react';
+import { EmbeddedCheckoutProvider, EmbeddedCheckout } from '@stripe/react-stripe-js';
 import { useRouter } from '../lib/router';
 import { useCart } from '../lib/cart';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../lib/toast';
+import { stripePromise } from '../lib/stripe';
 import { createPurchase, createStripeCheckout, getProductSlugFromCart } from '../lib/payments';
 import { getCustomerProfile, upsertCustomerProfile } from '../lib/profile';
 
@@ -15,13 +17,18 @@ export const Checkout = () => {
   const { items } = useCart();
   const { error: showError, success: showSuccess } = useToast();
   const [processing, setProcessing] = useState(false);
-  const [orderComplete] = useState(false);
-  const [orderNumber] = useState('');
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
-  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [registerName, setRegisterName] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [registerCheckEmail, setRegisterCheckEmail] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
@@ -73,6 +80,30 @@ export const Checkout = () => {
     }
   };
 
+  const applyLoggedInUser = async (loggedInUser: any) => {
+    setUser(loggedInUser);
+    setShowAuthModal(false);
+
+    const profile = await getCustomerProfile(loggedInUser.id);
+
+    if (profile) {
+      setFormData({
+        email: loggedInUser.email || '',
+        name: profile.full_name,
+        phone: profile.phone,
+        address: profile.address,
+        city: profile.city,
+        postalCode: profile.postal_code,
+        country: profile.country,
+      });
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        email: loggedInUser.email || '',
+      }));
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoggingIn(true);
@@ -86,28 +117,8 @@ export const Checkout = () => {
       if (error) throw error;
 
       if (data.user) {
-        setUser(data.user);
-        setShowLoginModal(false);
         showSuccess('Ingelogd! Je gegevens worden ingevuld...');
-
-        const profile = await getCustomerProfile(data.user.id);
-
-        if (profile) {
-          setFormData({
-            email: data.user.email || '',
-            name: profile.full_name,
-            phone: profile.phone,
-            address: profile.address,
-            city: profile.city,
-            postalCode: profile.postal_code,
-            country: profile.country,
-          });
-        } else {
-          setFormData(prev => ({
-            ...prev,
-            email: data.user.email || '',
-          }));
-        }
+        await applyLoggedInUser(data.user);
       }
     } catch (err: any) {
       console.error('Login error:', err);
@@ -115,6 +126,44 @@ export const Checkout = () => {
     } finally {
       setIsLoggingIn(false);
     }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsRegistering(true);
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: registerEmail,
+        password: registerPassword,
+        options: {
+          data: { name: registerName },
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.session && data.user) {
+        // Email confirmation is off — the account is active immediately.
+        showSuccess('Account aangemaakt! Je bent ingelogd.');
+        await applyLoggedInUser(data.user);
+      } else {
+        // Email confirmation is required before a session exists — the
+        // customer can still finish this order as a guest in the meantime.
+        setRegisterCheckEmail(true);
+      }
+    } catch (err: any) {
+      console.error('Register error:', err);
+      showError(err.message || 'Fout bij account aanmaken');
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  const closeAuthModal = () => {
+    setShowAuthModal(false);
+    setAuthMode('login');
+    setRegisterCheckEmail(false);
   };
 
   const subtotal = items.reduce((sum, item) => {
@@ -182,13 +231,13 @@ export const Checkout = () => {
         },
       });
 
-      const { checkout_url } = await createStripeCheckout(purchase.id, return_token);
+      const { client_secret } = await createStripeCheckout(purchase.id, return_token);
 
       // Cart stays filled until the payment actually succeeds — it's cleared
-      // on the payment-return page once the status comes back "paid", not
-      // here. That way a cancelled or failed payment doesn't leave the
-      // customer staring at an empty cart with nothing to retry.
-      window.location.href = checkout_url;
+      // on the payment-return page once the status comes back "paid". The
+      // customer never leaves cultheld.nl: Stripe's Embedded Checkout is
+      // mounted right here instead of redirecting to checkout.stripe.com.
+      setClientSecret(client_secret);
     } catch (error: any) {
       console.error('Error processing order:', error);
       showError(error.message || 'Er is een fout opgetreden bij het verwerken van je bestelling');
@@ -197,34 +246,7 @@ export const Checkout = () => {
     }
   };
 
-  if (orderComplete) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-white rounded-lg p-12 text-center">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle size={48} className="text-green-600" />
-            </div>
-            <h1 className="text-3xl font-bold mb-4">Bedankt voor je bestelling!</h1>
-            <p className="text-xl text-gray-600 mb-2">Bestellingnummer: {orderNumber}</p>
-            <p className="text-gray-600 mb-8">
-              Je ontvangt een bevestigingsmail op {formData.email}
-            </p>
-            <div className="space-y-3">
-              <button
-                onClick={() => navigate('/')}
-                className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
-              >
-                Verder shoppen
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (items.length === 0) {
+  if (items.length === 0 && !clientSecret) {
     return (
       <div className="min-h-screen bg-gray-50 py-12">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -246,17 +268,26 @@ export const Checkout = () => {
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <button
-          onClick={() => navigate('/cart')}
+          onClick={() => (clientSecret ? setClientSecret(null) : navigate('/cart'))}
           className="flex items-center gap-2 text-gray-600 hover:text-black mb-8 transition-colors"
         >
           <ChevronLeft size={20} />
-          Terug naar winkelwagen
+          {clientSecret ? 'Terug naar bestelgegevens' : 'Terug naar winkelwagen'}
         </button>
 
         <h1 className="text-4xl font-bold mb-8">Afrekenen</h1>
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
+            {clientSecret ? (
+              <div className="bg-white rounded-lg p-4 sm:p-8">
+                <h2 className="text-2xl font-bold mb-6">Betalen</h2>
+                <EmbeddedCheckoutProvider stripe={stripePromise} options={{ clientSecret }}>
+                  <EmbeddedCheckout />
+                </EmbeddedCheckoutProvider>
+              </div>
+            ) : (
+              <>
             {!user && !loadingProfile && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
                 <div className="flex items-start gap-3">
@@ -264,15 +295,30 @@ export const Checkout = () => {
                   <div className="flex-1">
                     <h3 className="font-semibold mb-2">Heb je al een account?</h3>
                     <p className="text-sm text-gray-600 mb-4">
-                      Log in om je opgeslagen adresgegevens te gebruiken
+                      Log in om je opgeslagen adresgegevens te gebruiken, of maak een account aan om je volgende bestelling sneller af te rekenen.
                     </p>
-                    <button
-                      onClick={() => setShowLoginModal(true)}
-                      className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
-                    >
-                      <LogIn size={16} />
-                      Inloggen
-                    </button>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        onClick={() => {
+                          setAuthMode('login');
+                          setShowAuthModal(true);
+                        }}
+                        className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
+                      >
+                        <LogIn size={16} />
+                        Inloggen
+                      </button>
+                      <button
+                        onClick={() => {
+                          setAuthMode('register');
+                          setShowAuthModal(true);
+                        }}
+                        className="flex items-center gap-2 bg-white border-2 border-black text-black px-4 py-2 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                      >
+                        <UserPlus size={16} />
+                        Account aanmaken
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -423,6 +469,8 @@ export const Checkout = () => {
                 {processing ? 'Bestelling voorbereiden...' : !acceptedTerms ? 'Accepteer eerst de voorwaarden' : 'Doorgaan naar betalen'}
               </button>
             </form>
+              </>
+            )}
           </div>
 
           {processing && (
@@ -436,7 +484,7 @@ export const Checkout = () => {
                 </div>
                 <h3 className="text-xl font-bold mb-2">Bestelling verwerken...</h3>
                 <p className="text-gray-600">
-                  We bereiden je bestelling voor en leiden je door naar de betaalpagina. Dit kan even duren.
+                  We bereiden je bestelling voor. Dit kan even duren.
                 </p>
               </div>
             </div>
@@ -502,64 +550,159 @@ export const Checkout = () => {
         </div>
       </div>
 
-      {showLoginModal && (
+      {showAuthModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-8 max-w-md w-full">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold">Inloggen</h2>
+              <h2 className="text-2xl font-bold">
+                {authMode === 'login' ? 'Inloggen' : 'Account aanmaken'}
+              </h2>
               <button
-                onClick={() => setShowLoginModal(false)}
+                onClick={closeAuthModal}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-2">Email</label>
-                <input
-                  type="email"
-                  required
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
-                  placeholder="jouw@email.nl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2">Wachtwoord</label>
-                <input
-                  type="password"
-                  required
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
-                />
-              </div>
-
+            <div className="flex mb-6 border-b border-gray-200">
               <button
-                type="submit"
-                disabled={isLoggingIn}
-                className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:opacity-50"
+                type="button"
+                onClick={() => {
+                  setAuthMode('login');
+                  setRegisterCheckEmail(false);
+                }}
+                className={`flex-1 pb-3 text-sm font-semibold border-b-2 transition-colors ${
+                  authMode === 'login'
+                    ? 'border-black text-black'
+                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                }`}
               >
-                {isLoggingIn ? 'Bezig...' : 'Inloggen'}
+                Inloggen
               </button>
+              <button
+                type="button"
+                onClick={() => setAuthMode('register')}
+                className={`flex-1 pb-3 text-sm font-semibold border-b-2 transition-colors ${
+                  authMode === 'register'
+                    ? 'border-black text-black'
+                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                Account aanmaken
+              </button>
+            </div>
 
-              <div className="text-center">
+            {authMode === 'login' ? (
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                    placeholder="jouw@email.nl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Wachtwoord</label>
+                  <input
+                    type="password"
+                    required
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:opacity-50"
+                >
+                  {isLoggingIn ? 'Bezig...' : 'Inloggen'}
+                </button>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAuthModal(false);
+                      navigate('/forgot-password');
+                    }}
+                    className="text-sm text-gray-600 hover:text-black transition-colors"
+                  >
+                    Wachtwoord vergeten?
+                  </button>
+                </div>
+              </form>
+            ) : registerCheckEmail ? (
+              <div className="text-center py-4">
+                <p className="text-gray-700 mb-4">
+                  Bijna klaar! We hebben een bevestigingsmail gestuurd naar{' '}
+                  <span className="font-semibold">{registerEmail}</span>. Bevestig je e-mailadres om in te loggen.
+                </p>
+                <p className="text-sm text-gray-500 mb-6">
+                  Je kunt deze bestelling ondertussen gewoon als gast afronden.
+                </p>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowLoginModal(false);
-                    navigate('/forgot-password');
-                  }}
-                  className="text-sm text-gray-600 hover:text-black transition-colors"
+                  onClick={closeAuthModal}
+                  className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
                 >
-                  Wachtwoord vergeten?
+                  Verder als gast
                 </button>
               </div>
-            </form>
+            ) : (
+              <form onSubmit={handleRegister} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Naam</label>
+                  <input
+                    type="text"
+                    required
+                    value={registerName}
+                    onChange={(e) => setRegisterName(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={registerEmail}
+                    onChange={(e) => setRegisterEmail(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                    placeholder="jouw@email.nl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Wachtwoord</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={registerPassword}
+                    onChange={(e) => setRegisterPassword(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                    placeholder="Minimaal 6 tekens"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isRegistering}
+                  className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:opacity-50"
+                >
+                  {isRegistering ? 'Bezig...' : 'Account aanmaken'}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}

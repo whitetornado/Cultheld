@@ -145,10 +145,11 @@ export const PaymentReturn = () => {
     }
   };
 
-  const openPaymentPage = () => {
-    if (statusData?.payment?.checkout_url) {
-      window.location.href = statusData.payment.checkout_url;
-    }
+  // Embedded Checkout has no separate hosted page to redirect back to —
+  // "reopening" the payment just means going back to /checkout, where a
+  // fresh embedded session is created/resumed inline.
+  const resumeCheckout = () => {
+    navigate('/checkout');
   };
 
   const refreshStatus = () => {
@@ -352,15 +353,13 @@ export const PaymentReturn = () => {
             </div>
 
             <div className="space-y-3">
-              {statusData?.payment?.checkout_url && (
-                <button
-                  onClick={openPaymentPage}
-                  className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
-                >
-                  <ExternalLink size={20} />
-                  Open betaalpagina opnieuw
-                </button>
-              )}
+              <button
+                onClick={resumeCheckout}
+                className="w-full bg-black text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
+              >
+                <ExternalLink size={20} />
+                Ga terug naar afrekenen
+              </button>
               <button
                 onClick={refreshStatus}
                 className="w-full border-2 border-black text-black py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
