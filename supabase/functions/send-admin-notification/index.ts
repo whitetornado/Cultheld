@@ -38,7 +38,7 @@ interface OrderData {
 }
 
 function generateAdminNotificationHTML(order: OrderData): string {
-  const logoUrl = 'https://kraszqrhydhhkknyapxa.supabase.co/storage/v1/object/public/assets/logo-met-kader.jpg';
+  const logoUrl = 'https://cultheld.nl/logo-met-kader.jpg';
   
   const itemsHTML = order.items.map(item => `
     <tr style="border-bottom: 1px solid #e5e7eb;">

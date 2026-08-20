@@ -30,7 +30,7 @@ function getTrackingUrl(carrier: string, trackingNumber: string): string {
 }
 
 function generateShippingNotificationHTML(data: ShippingData): string {
-  const logoUrl = 'https://kraszqrhydhhkknyapxa.supabase.co/storage/v1/object/public/assets/logo-met-kader.jpg';
+  const logoUrl = 'https://cultheld.nl/logo-met-kader.jpg';
   const trackingUrl = data.tracking_url || getTrackingUrl(data.carrier, data.tracking_number);
   
   return `

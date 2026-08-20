@@ -24,7 +24,7 @@ interface SignupConfirmationData {
 }
 
 function generateSignupConfirmationHTML(confirmLink: string, name: string, email: string): string {
-  const logoUrl = 'https://kraszqrhydhhkknyapxa.supabase.co/storage/v1/object/public/assets/logo-met-kader.jpg';
+  const logoUrl = 'https://cultheld.nl/logo-met-kader.jpg';
   const greeting = name ? `Beste ${name},` : 'Welkom,';
 
   return `

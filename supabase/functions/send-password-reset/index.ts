@@ -17,7 +17,7 @@ interface PasswordResetData {
 }
 
 function generatePasswordResetHTML(resetLink: string, email: string): string {
-  const logoUrl = 'https://kraszqrhydhhkknyapxa.supabase.co/storage/v1/object/public/assets/logo-met-kader.jpg';
+  const logoUrl = 'https://cultheld.nl/logo-met-kader.jpg';
 
   return `
 <!DOCTYPE html>
