@@ -21,11 +21,15 @@ export const PaymentReturn = () => {
 
   const purchaseId = params.purchase_id;
   const token = params.token;
-  // Stripe redirects here with ?canceled=true when the customer backs out of
-  // the hosted checkout page instead of completing it — no point polling for
-  // a status that will never arrive, so this short-circuits straight to the
-  // "cancelled" screen.
+  // Legacy param from the old Embedded Checkout flow — kept for any stale
+  // bookmarked/cached links.
   const wasCanceled = params.canceled === 'true';
+  // Redirect-based payment methods (iDEAL, Bancontact) send the customer
+  // back here with Stripe's own ?redirect_status=... appended alongside our
+  // purchase_id/token. "failed" covers both a declined payment and the
+  // customer backing out at the bank — either way nothing was charged and
+  // there's no point polling for a status that already came back negative.
+  const redirectFailed = params.redirect_status === 'failed' || params.redirect_status === 'requires_payment_method';
 
   useEffect(() => {
     checkSession();
@@ -45,6 +49,12 @@ export const PaymentReturn = () => {
 
     if (wasCanceled) {
       setStatus('canceled');
+      setLoading(false);
+      return;
+    }
+
+    if (redirectFailed) {
+      setStatus('failed');
       setLoading(false);
       return;
     }
@@ -139,6 +149,22 @@ export const PaymentReturn = () => {
       setLoading(false);
     } catch (err) {
       console.error('Error checking payment status:', err);
+
+      const statusCode = (err as { status?: number })?.status;
+
+      if (statusCode === 401 || statusCode === 404) {
+        // We couldn't verify this purchase belongs to this visitor/token —
+        // most often because the checkout attempt was abandoned or the
+        // return link is stale, not because anything actually broke. Route
+        // to the same reassuring "cancelled" screen instead of an alarming
+        // error page: either way, the cart was never touched (it's only
+        // cleared above, once payment_status === 'paid' is confirmed), so
+        // there's nothing at risk and nothing for the customer to worry about.
+        setStatus('canceled');
+        setLoading(false);
+        return;
+      }
+
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Onbekende fout');
       setLoading(false);

@@ -56,7 +56,7 @@ export interface Payment {
   purchase_id: string;
   stripe_checkout_session_id: string | null;
   stripe_payment_intent_id: string | null;
-  checkout_url: string | null;
+  checkout_url: string;
   amount_value: string;
   currency: string;
   status: string;
@@ -141,8 +141,22 @@ export async function getPaymentStatus(purchaseId: string, token?: string): Prom
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('Payment status error:', errorText);
-    throw new Error('Failed to get payment status');
+    console.error('Payment status error:', response.status, errorText);
+
+    let errorCode: string | undefined;
+    let errorMessage = 'Failed to get payment status';
+    try {
+      const parsed = JSON.parse(errorText);
+      errorCode = parsed.error_code;
+      errorMessage = parsed.error || errorMessage;
+    } catch {
+      // Non-JSON error body — keep the generic message above.
+    }
+
+    const err = new Error(errorMessage) as Error & { status?: number; code?: string };
+    err.status = response.status;
+    err.code = errorCode;
+    throw err;
   }
 
   return await response.json();

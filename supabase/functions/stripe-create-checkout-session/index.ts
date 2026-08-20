@@ -17,7 +17,6 @@ Deno.serve(async (req: Request) => {
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
-    const appBaseUrl = Deno.env.get('APP_BASE_URL') || supabaseUrl.replace('.supabase.co', '.vercel.app');
 
     if (!stripeSecretKey) {
       return new Response(
@@ -99,27 +98,33 @@ Deno.serve(async (req: Request) => {
       .in('status', ['open', 'pending', 'unpaid'])
       .maybeSingle();
 
-    // Embedded Checkout's client_secret is short-lived and isn't persisted —
-    // re-fetch it from Stripe on every resume instead of storing it. If the
-    // session has since expired or completed, fall through and create a
+    // A PaymentIntent's client_secret stays valid for the lifetime of the
+    // intent — re-fetch it from Stripe on every resume instead of storing it,
+    // so it always reflects the intent's current (possibly updated) state.
+    // If the intent has since succeeded/canceled, fall through and create a
     // fresh one below.
-    if (existingPayment && existingPayment.stripe_checkout_session_id) {
+    if (existingPayment && existingPayment.stripe_payment_intent_id) {
       try {
-        const existingSession = await stripe.checkout.sessions.retrieve(
-          existingPayment.stripe_checkout_session_id
+        const existingIntent = await stripe.paymentIntents.retrieve(
+          existingPayment.stripe_payment_intent_id
         );
 
-        if (existingSession.status === 'open' && existingSession.client_secret) {
+        if (
+          (existingIntent.status === 'requires_payment_method' ||
+            existingIntent.status === 'requires_confirmation' ||
+            existingIntent.status === 'requires_action') &&
+          existingIntent.client_secret
+        ) {
           return new Response(
             JSON.stringify({
               payment: existingPayment,
-              client_secret: existingSession.client_secret,
+              client_secret: existingIntent.client_secret,
             }),
             { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
       } catch (err) {
-        console.warn('Could not retrieve existing Stripe session, creating a new one:', err);
+        console.warn('Could not retrieve existing Stripe payment intent, creating a new one:', err);
       }
     }
 
@@ -129,78 +134,47 @@ Deno.serve(async (req: Request) => {
     const items: any[] = Array.isArray(metadata.items) ? metadata.items : [];
     const currency = (purchase.currency || 'EUR').toLowerCase();
 
-    const lineItems = items.length > 0
-      ? items.map((item) => {
+    // The Payment Element needs a single total amount rather than Checkout's
+    // per-line-item list — the per-item math is kept identical to before,
+    // just summed instead of turned into Stripe line items.
+    const itemsAmount = items.length > 0
+      ? items.reduce((sum, item) => {
           const unitAmount = Math.round(parseFloat(item.unit_price || '0') * 100);
-          const name = [item.legend_name, item.product_type_name].filter(Boolean).join(' — ') || 'Cultheld product';
-          const descriptionParts = [item.color_name, item.size].filter(Boolean);
-          return {
-            price_data: {
-              currency,
-              unit_amount: unitAmount,
-              product_data: {
-                name,
-                description: descriptionParts.length ? descriptionParts.join(' / ') : undefined,
-              },
-            },
-            quantity: item.quantity || 1,
-          };
-        })
-      : [
-          {
-            price_data: {
-              currency,
-              unit_amount: Math.round(parseFloat(purchase.amount_value || '0') * 100),
-              product_data: { name: purchase.product_name || 'Cultheld bestelling' },
-            },
-            quantity: 1,
-          },
-        ];
+          const quantity = item.quantity || 1;
+          return sum + unitAmount * quantity;
+        }, 0)
+      : Math.round(parseFloat(purchase.amount_value || '0') * 100);
 
     const shippingCost = parseFloat(metadata.shipping_cost || '0');
-    if (shippingCost > 0) {
-      lineItems.push({
-        price_data: {
-          currency,
-          unit_amount: Math.round(shippingCost * 100),
-          product_data: { name: 'Verzendkosten' },
-        },
-        quantity: 1,
-      });
-    }
+    const shippingAmount = shippingCost > 0 ? Math.round(shippingCost * 100) : 0;
+    const amount = itemsAmount + shippingAmount;
 
-    // Embedded Checkout keeps the customer on cultheld.nl the whole time —
-    // there is no separate hosted page to redirect away to, so there's also
-    // no cancel_url: "cancelling" just means the customer closes/leaves the
-    // embedded form on our own page, which we handle entirely client-side.
-    // return_url is only used once payment actually completes.
-    const returnUrl = `${appBaseUrl}/payment/return?purchase_id=${purchase_id}&token=${return_token}&session_id={CHECKOUT_SESSION_ID}`;
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      ui_mode: 'embedded',
-      line_items: lineItems,
-      customer_email: purchase.customer_email,
-      return_url: returnUrl,
+    // Payment Element renders and confirms entirely on cultheld.nl — no
+    // cancel_url or hosted-page redirect. return_url is only used for
+    // redirect-based methods (iDEAL, Bancontact) once the bank hop completes,
+    // and is built client-side from window.location.origin so it naturally
+    // matches whichever environment (localhost or production) started the
+    // checkout.
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,
+      currency,
+      automatic_payment_methods: { enabled: true },
+      receipt_email: purchase.customer_email || undefined,
       metadata: { purchase_id },
-      payment_intent_data: { metadata: { purchase_id } },
     });
-
-    await supabase
-      .from('purchases')
-      .update({ status: 'pending_payment' })
-      .eq('id', purchase_id);
 
     const { data: payment, error: paymentError } = await supabase
       .from('payments')
       .insert({
         purchase_id,
-        stripe_checkout_session_id: session.id,
-        checkout_url: session.url ?? '',
+        stripe_payment_intent_id: paymentIntent.id,
+        // checkout_url is NOT NULL in the payments table — Payment Element
+        // has no separate hosted page, so '' is stored instead of a real URL.
+        checkout_url: '',
         amount_value: purchase.amount_value,
         currency: purchase.currency,
-        status: session.payment_status === 'paid' ? 'paid' : 'open',
-        metadata: { stripe_session_id: session.id },
+        status: paymentIntent.status === 'succeeded' ? 'paid' : 'open',
+        metadata: { stripe_payment_intent_id: paymentIntent.id },
       })
       .select()
       .single();
@@ -214,7 +188,7 @@ Deno.serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ payment, client_secret: session.client_secret }),
+      JSON.stringify({ payment, client_secret: paymentIntent.client_secret }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { ChevronLeft, LogIn, UserPlus, User, X } from 'lucide-react';
-import { EmbeddedCheckoutProvider, EmbeddedCheckout } from '@stripe/react-stripe-js';
+import { ChevronLeft, LogIn, UserPlus, User, X, Lock } from 'lucide-react';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import type { StripeElementsOptions } from '@stripe/stripe-js';
 import { useRouter } from '../lib/router';
 import { useCart } from '../lib/cart';
 import { supabase } from '../lib/supabase';
@@ -12,12 +13,109 @@ import { getCustomerProfile, upsertCustomerProfile } from '../lib/profile';
 const SHIPPING_COST = 4.95;
 const FREE_SHIPPING_THRESHOLD = 50;
 
+// Cultheld's black/white palette, applied to the Payment Element via
+// Stripe's Appearance API so the payment-method form matches the rest of
+// the site instead of Stripe's default blue theme.
+const stripeAppearance: StripeElementsOptions['appearance'] = {
+  theme: 'stripe',
+  variables: {
+    colorPrimary: '#000000',
+    colorBackground: '#ffffff',
+    colorText: '#111827',
+    colorDanger: '#dc2626',
+    borderRadius: '8px',
+    fontFamily: 'inherit',
+  },
+};
+
+interface PaymentFormProps {
+  purchaseId: string;
+  returnToken: string;
+}
+
+// The actual payment-method form. Lives entirely on cultheld.nl — Stripe's
+// Payment Element renders inline here instead of the customer being sent to
+// a Stripe-hosted page. Redirect-only methods (iDEAL, Bancontact) still hop
+// briefly to the bank to authenticate; card and similar methods resolve
+// without ever leaving this page.
+const PaymentForm = ({ purchaseId, returnToken }: PaymentFormProps) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const { navigate } = useRouter();
+  const [submitting, setSubmitting] = useState(false);
+  const [payError, setPayError] = useState('');
+
+  const handlePay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setSubmitting(true);
+    setPayError('');
+
+    // Built client-side from window.location.origin so it naturally matches
+    // whichever environment (localhost or production) started the checkout,
+    // instead of always pointing at a fixed production URL.
+    const returnUrl = `${window.location.origin}/payment/return?purchase_id=${purchaseId}&token=${returnToken}`;
+
+    const { error, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: returnUrl },
+      redirect: 'if_required',
+    });
+
+    if (error) {
+      // Methods that don't redirect (e.g. cards) surface their error here,
+      // without the customer ever leaving cultheld.nl. Redirect-based
+      // methods (iDEAL) instead land back on /payment/return via a full page
+      // navigation, where this same status gets resolved.
+      setPayError(error.message || 'Er is iets misgegaan bij het betalen. Probeer het opnieuw.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (paymentIntent) {
+      // No redirect happened — send the customer through the same return
+      // page a redirect-based method would land on, so status confirmation
+      // and cart-clearing always run through one code path.
+      navigate(`/payment/return?purchase_id=${purchaseId}&token=${returnToken}`);
+    }
+  };
+
+  return (
+    <form onSubmit={handlePay}>
+      <PaymentElement />
+
+      {payError && (
+        <div className="mt-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-4">
+          {payError}
+        </div>
+      )}
+
+      <button
+        type="submit"
+        disabled={!stripe || submitting}
+        className="w-full mt-6 bg-black text-white py-4 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+      >
+        {submitting && (
+          <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        )}
+        {submitting ? 'Bezig met betalen...' : 'Nu betalen'}
+      </button>
+    </form>
+  );
+};
+
 export const Checkout = () => {
   const { navigate } = useRouter();
   const { items } = useCart();
   const { error: showError, success: showSuccess } = useToast();
   const [processing, setProcessing] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [purchaseId, setPurchaseId] = useState<string | null>(null);
+  const [returnToken, setReturnToken] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -234,8 +332,11 @@ export const Checkout = () => {
 
       // Cart stays filled until the payment actually succeeds — it's cleared
       // on the payment-return page once the status comes back "paid". The
-      // customer never leaves cultheld.nl: Stripe's Embedded Checkout is
-      // mounted right here instead of redirecting to checkout.stripe.com.
+      // customer never leaves cultheld.nl for the payment-method selection
+      // itself: Stripe's Payment Element is mounted right here instead of
+      // redirecting to checkout.stripe.com.
+      setPurchaseId(purchase.id);
+      setReturnToken(return_token);
       setClientSecret(client_secret);
     } catch (error: any) {
       console.error('Error processing order:', error);
@@ -278,196 +379,202 @@ export const Checkout = () => {
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
-            {clientSecret ? (
+            {clientSecret && purchaseId && returnToken ? (
               <div className="bg-white rounded-lg p-4 sm:p-8">
-                <h2 className="text-2xl font-bold mb-6">Betalen</h2>
-                <EmbeddedCheckoutProvider stripe={stripePromise} options={{ clientSecret }}>
-                  <EmbeddedCheckout />
-                </EmbeddedCheckoutProvider>
+                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                  <Lock size={20} />
+                  Veilig betalen
+                </h2>
+                <Elements
+                  stripe={stripePromise}
+                  options={{ clientSecret, appearance: stripeAppearance }}
+                >
+                  <PaymentForm purchaseId={purchaseId} returnToken={returnToken} />
+                </Elements>
               </div>
             ) : (
               <>
-            {!user && !loadingProfile && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
-                <div className="flex items-start gap-3">
-                  <User size={24} className="text-blue-600 flex-shrink-0 mt-1" />
-                  <div className="flex-1">
-                    <h3 className="font-semibold mb-2">Heb je al een account?</h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                      Log in om je opgeslagen adresgegevens te gebruiken, of maak een account aan om je volgende bestelling sneller af te rekenen.
-                    </p>
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        onClick={() => {
-                          setAuthMode('login');
-                          setShowAuthModal(true);
-                        }}
-                        className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
-                      >
-                        <LogIn size={16} />
-                        Inloggen
-                      </button>
-                      <button
-                        onClick={() => {
-                          setAuthMode('register');
-                          setShowAuthModal(true);
-                        }}
-                        className="flex items-center gap-2 bg-white border-2 border-black text-black px-4 py-2 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
-                      >
-                        <UserPlus size={16} />
-                        Account aanmaken
-                      </button>
+                {!user && !loadingProfile && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+                    <div className="flex items-start gap-3">
+                      <User size={24} className="text-blue-600 flex-shrink-0 mt-1" />
+                      <div className="flex-1">
+                        <h3 className="font-semibold mb-2">Heb je al een account?</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                          Log in om je opgeslagen adresgegevens te gebruiken, of maak een account aan om je volgende bestelling sneller af te rekenen.
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            onClick={() => {
+                              setAuthMode('login');
+                              setShowAuthModal(true);
+                            }}
+                            className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-lg font-semibold hover:bg-gray-800 transition-colors"
+                          >
+                            <LogIn size={16} />
+                            Inloggen
+                          </button>
+                          <button
+                            onClick={() => {
+                              setAuthMode('register');
+                              setShowAuthModal(true);
+                            }}
+                            className="flex items-center gap-2 bg-white border-2 border-black text-black px-4 py-2 rounded-lg font-semibold hover:bg-gray-50 transition-colors"
+                          >
+                            <UserPlus size={16} />
+                            Account aanmaken
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {user && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
-                    <User size={20} className="text-white" />
-                  </div>
-                  <div>
-                    <p className="font-semibold">Ingelogd als</p>
-                    <p className="text-sm text-gray-600">{user.email}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="bg-white rounded-lg p-8">
-              <h2 className="text-2xl font-bold mb-6">Contactgegevens</h2>
-
-              <div className="space-y-4 mb-8">
-                <div>
-                  <label className="block text-sm font-semibold mb-2">Email</label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
-                    placeholder="jouw@email.nl"
-                    disabled={!!user}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-2">Telefoonnummer (optioneel)</label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
-                    placeholder="06 12345678"
-                  />
-                </div>
-              </div>
-
-              <h2 className="text-2xl font-bold mb-6">Verzendadres</h2>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-2">Volledige naam</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2">Adres</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
-                    placeholder="Straat en huisnummer"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold mb-2">Postcode</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.postalCode}
-                      onChange={(e) =>
-                        setFormData({ ...formData, postalCode: e.target.value })
-                      }
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
-                      placeholder="1234 AB"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold mb-2">Plaats</label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.city}
-                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold mb-2">Land</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.country}
-                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-8 p-4 bg-gray-50 rounded-lg">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={acceptedTerms}
-                    onChange={(e) => setAcceptedTerms(e.target.checked)}
-                    className="mt-1 w-5 h-5 rounded border-gray-300 text-black focus:ring-black"
-                    required
-                  />
-                  <span className="text-sm text-gray-700">
-                    Ik ga akkoord met de{' '}
-                    <a
-                      href="/terms"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-black underline hover:no-underline font-semibold"
-                    >
-                      algemene voorwaarden
-                    </a>
-                    . Ik begrijp dat producten op maat worden gemaakt en daarom niet retourneerbaar zijn.
-                  </span>
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                disabled={processing || !acceptedTerms}
-                className="w-full mt-6 bg-black text-white py-4 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {processing && (
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
                 )}
-                {processing ? 'Bestelling voorbereiden...' : !acceptedTerms ? 'Accepteer eerst de voorwaarden' : 'Doorgaan naar betalen'}
-              </button>
-            </form>
+
+                {user && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-green-600 rounded-full flex items-center justify-center">
+                        <User size={20} className="text-white" />
+                      </div>
+                      <div>
+                        <p className="font-semibold">Ingelogd als</p>
+                        <p className="text-sm text-gray-600">{user.email}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="bg-white rounded-lg p-8">
+                  <h2 className="text-2xl font-bold mb-6">Contactgegevens</h2>
+
+                  <div className="space-y-4 mb-8">
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">Email</label>
+                      <input
+                        type="email"
+                        required
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                        placeholder="jouw@email.nl"
+                        disabled={!!user}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">Telefoonnummer (optioneel)</label>
+                      <input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                        placeholder="06 12345678"
+                      />
+                    </div>
+                  </div>
+
+                  <h2 className="text-2xl font-bold mb-6">Verzendadres</h2>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">Volledige naam</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">Adres</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.address}
+                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                        placeholder="Straat en huisnummer"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold mb-2">Postcode</label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.postalCode}
+                          onChange={(e) =>
+                            setFormData({ ...formData, postalCode: e.target.value })
+                          }
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                          placeholder="1234 AB"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold mb-2">Plaats</label>
+                        <input
+                          type="text"
+                          required
+                          value={formData.city}
+                          onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-2">Land</label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.country}
+                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-black focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-8 p-4 bg-gray-50 rounded-lg">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={acceptedTerms}
+                        onChange={(e) => setAcceptedTerms(e.target.checked)}
+                        className="mt-1 w-5 h-5 rounded border-gray-300 text-black focus:ring-black"
+                        required
+                      />
+                      <span className="text-sm text-gray-700">
+                        Ik ga akkoord met de{' '}
+                        <a
+                          href="/terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-black underline hover:no-underline font-semibold"
+                        >
+                          algemene voorwaarden
+                        </a>
+                        . Ik begrijp dat producten op maat worden gemaakt en daarom niet retourneerbaar zijn.
+                      </span>
+                    </label>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={processing || !acceptedTerms}
+                    className="w-full mt-6 bg-black text-white py-4 rounded-lg font-semibold hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {processing && (
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    )}
+                    {processing ? 'Bestelling voorbereiden...' : !acceptedTerms ? 'Accepteer eerst de voorwaarden' : 'Doorgaan naar betalen'}
+                  </button>
+                </form>
               </>
             )}
           </div>

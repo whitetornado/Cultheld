@@ -8,20 +8,26 @@ const corsHeaders = {
 };
 
 async function syncPaymentWithStripe(stripe: Stripe, supabase: any, payment: any) {
-  if (!payment || !payment.stripe_checkout_session_id) {
-    return { synced: false, error: 'No payment or stripe_checkout_session_id' };
+  if (!payment || !payment.stripe_payment_intent_id) {
+    return { synced: false, error: 'No payment or stripe_payment_intent_id' };
   }
 
   try {
-    const session = await stripe.checkout.sessions.retrieve(payment.stripe_checkout_session_id);
+    const intent = await stripe.paymentIntents.retrieve(payment.stripe_payment_intent_id);
     const currentStatus = payment.status;
 
     let newStatus = currentStatus;
-    if (session.payment_status === 'paid') {
+    if (intent.status === 'succeeded') {
       newStatus = 'paid';
-    } else if (session.status === 'expired') {
-      newStatus = 'expired';
-    } else if (session.status === 'open') {
+    } else if (intent.status === 'canceled') {
+      newStatus = 'canceled';
+    } else if (intent.status === 'processing') {
+      newStatus = 'pending';
+    } else if (
+      intent.status === 'requires_payment_method' ||
+      intent.status === 'requires_confirmation' ||
+      intent.status === 'requires_action'
+    ) {
       newStatus = 'open';
     }
 
@@ -33,14 +39,12 @@ async function syncPaymentWithStripe(stripe: Stripe, supabase: any, payment: any
 
       if (newStatus === 'paid') {
         updates.paid_at = new Date().toISOString();
-        updates.stripe_payment_intent_id =
-          typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id;
       }
 
       await supabase.from('payments').update(updates).eq('id', payment.id);
 
       const purchaseStatus =
-        newStatus === 'paid' ? 'paid' : newStatus === 'expired' ? 'failed' : 'pending_payment';
+        newStatus === 'paid' ? 'paid' : newStatus === 'canceled' ? 'failed' : 'pending_payment';
 
       await supabase
         .from('purchases')

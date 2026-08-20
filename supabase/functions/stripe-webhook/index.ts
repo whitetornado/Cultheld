@@ -56,10 +56,10 @@ Deno.serve(async (req: Request) => {
     }
 
     if (
-      event.type !== 'checkout.session.completed' &&
-      event.type !== 'checkout.session.async_payment_succeeded' &&
-      event.type !== 'checkout.session.async_payment_failed' &&
-      event.type !== 'checkout.session.expired'
+      event.type !== 'payment_intent.succeeded' &&
+      event.type !== 'payment_intent.payment_failed' &&
+      event.type !== 'payment_intent.canceled' &&
+      event.type !== 'payment_intent.processing'
     ) {
       if (webhookLogId) {
         await supabase.from('webhook_logs').update({ status: 'ignored' }).eq('id', webhookLogId);
@@ -67,17 +67,17 @@ Deno.serve(async (req: Request) => {
       return new Response('OK', { status: 200 });
     }
 
-    const session = event.data.object as Stripe.Checkout.Session;
-    const purchaseId = session.metadata?.purchase_id;
+    const paymentIntent = event.data.object as Stripe.PaymentIntent;
+    const purchaseId = paymentIntent.metadata?.purchase_id;
 
     const { data: payment, error: paymentError } = await supabase
       .from('payments')
       .select('*, purchases(*)')
-      .eq('stripe_checkout_session_id', session.id)
+      .eq('stripe_payment_intent_id', paymentIntent.id)
       .maybeSingle();
 
     if (paymentError || !payment) {
-      console.error('Payment not found for Stripe session:', session.id, purchaseId);
+      console.error('Payment not found for Stripe payment intent:', paymentIntent.id, purchaseId);
       if (webhookLogId) {
         await supabase.from('webhook_logs').update({ status: 'failed', purchase_id: purchaseId }).eq('id', webhookLogId);
       }
@@ -85,17 +85,18 @@ Deno.serve(async (req: Request) => {
     }
 
     let paymentStatus = 'open';
-    if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
-      paymentStatus = session.payment_status === 'paid' ? 'paid' : 'pending';
-    } else if (event.type === 'checkout.session.async_payment_failed') {
+    if (event.type === 'payment_intent.succeeded') {
+      paymentStatus = 'paid';
+    } else if (event.type === 'payment_intent.payment_failed') {
       paymentStatus = 'failed';
-    } else if (event.type === 'checkout.session.expired') {
-      paymentStatus = 'expired';
+    } else if (event.type === 'payment_intent.canceled') {
+      paymentStatus = 'canceled';
+    } else if (event.type === 'payment_intent.processing') {
+      paymentStatus = 'pending';
     }
 
     const updateData: Record<string, unknown> = {
       status: paymentStatus,
-      stripe_payment_intent_id: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id,
       webhook_called_at: new Date().toISOString(),
     };
 
@@ -108,7 +109,7 @@ Deno.serve(async (req: Request) => {
     let purchaseStatus = 'pending_payment';
     if (paymentStatus === 'paid') {
       purchaseStatus = 'paid';
-    } else if (['failed', 'expired'].includes(paymentStatus)) {
+    } else if (['failed', 'canceled'].includes(paymentStatus)) {
       purchaseStatus = 'failed';
     }
 
@@ -122,7 +123,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (paymentStatus === 'paid') {
-      console.log('Payment completed successfully:', session.id);
+      console.log('Payment completed successfully:', paymentIntent.id);
 
       const metadata = payment.purchases?.metadata || {};
       const items = metadata.items || [];
