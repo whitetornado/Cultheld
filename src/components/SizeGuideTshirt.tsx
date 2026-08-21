@@ -55,6 +55,14 @@ const COLOURS = [
   { name: 'Wit', hex: '#FFFFFF' },
 ];
 
+// Sfeerfoto's van het T-shirt — geleverd door Cultheld zelf (Anthem
+// lookbook-fotografie), niet uit de leverancier-specsheet.
+const PHOTOS = [
+  { src: '/sizeguide/tshirt-1.webp', alt: 'Anthem Heavyweight T-Shirt sfeerfoto 1' },
+  { src: '/sizeguide/tshirt-2.webp', alt: 'Anthem Heavyweight T-Shirt sfeerfoto 2' },
+  { src: '/sizeguide/tshirt-3.webp', alt: 'Anthem Heavyweight T-Shirt sfeerfoto 3' },
+];
+
 export const SizeGuideTshirt = ({ onClose }: SizeGuideTshirtProps) => {
   return (
     <div
@@ -87,6 +95,18 @@ export const SizeGuideTshirt = ({ onClose }: SizeGuideTshirtProps) => {
             organic ringspun garen voor een echte fashion-staple. Met 220gsm is dit een
             stevig, substantieel shirt met een retail-ready coupe.
           </p>
+
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {PHOTOS.map((photo) => (
+              <img
+                key={photo.src}
+                src={photo.src}
+                alt={photo.alt}
+                loading="lazy"
+                className="w-full aspect-[3/4] object-cover rounded-lg bg-gray-100"
+              />
+            ))}
+          </div>
 
           <div>
             <div className="flex items-center gap-2 mb-4">

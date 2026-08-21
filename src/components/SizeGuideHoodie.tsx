@@ -60,6 +60,14 @@ const COLOURS = [
   { name: 'Geel', hex: '#F5D056' },
 ];
 
+// Sfeerfoto's van de hoodie — geleverd door Cultheld zelf (Anthem
+// lookbook-fotografie), niet uit de leverancier-specsheet.
+const PHOTOS = [
+  { src: '/sizeguide/hoodie-1.webp', alt: 'Anthem Heren Hoodie sfeerfoto 1' },
+  { src: '/sizeguide/hoodie-2.webp', alt: 'Anthem Heren Hoodie sfeerfoto 2' },
+  { src: '/sizeguide/hoodie-3.webp', alt: 'Anthem Heren Hoodie sfeerfoto 3' },
+];
+
 export const SizeGuideHoodie = ({ onClose }: SizeGuideHoodieProps) => {
   return (
     <div
@@ -93,6 +101,18 @@ export const SizeGuideHoodie = ({ onClose }: SizeGuideHoodieProps) => {
             voor een hoodie met impact — draag 'm plain, of gebruik 'm als het perfecte canvas
             voor jouw eigen ontwerp.
           </p>
+
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {PHOTOS.map((photo) => (
+              <img
+                key={photo.src}
+                src={photo.src}
+                alt={photo.alt}
+                loading="lazy"
+                className="w-full aspect-[3/4] object-cover rounded-lg bg-gray-100"
+              />
+            ))}
+          </div>
 
           <div>
             <div className="flex items-center gap-2 mb-4">
