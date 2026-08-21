@@ -5,6 +5,9 @@ import { useCart } from '../lib/cart';
 import { supabase } from '../lib/supabase';
 import { Legend, ProductType, ProductConfig, Club, LegendPrintOverride } from '../lib/types';
 import { MockupPreview } from '../components/MockupPreview';
+import { SizeGuideTshirt } from '../components/SizeGuideTshirt';
+import { SizeGuideHoodie } from '../components/SizeGuideHoodie';
+import { SizeGuideSweater } from '../components/SizeGuideSweater';
 import { useSEO, breadcrumbJsonLd, SITE_URL } from '../lib/seo';
 
 const SIZES = ['S', 'M', 'L', 'XL', 'XXL'];
@@ -26,6 +29,7 @@ export const LegendDetail = () => {
   const [selectedSize, setSelectedSize] = useState<string>('M');
   const [quantity, setQuantity] = useState(1);
   const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [showSizeGuide, setShowSizeGuide] = useState(false);
 
   useEffect(() => {
     if (params.legendSlug) {
@@ -332,9 +336,17 @@ export const LegendDetail = () => {
                       </button>
                     ))}
                   </div>
-                  <button className="text-sm text-gray-600 hover:underline mt-2">
-                    Bekijk maattabel
-                  </button>
+                  {(selectedProductType === 'tshirt' ||
+                    selectedProductType === 'hoodie' ||
+                    selectedProductType === 'sweater') && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSizeGuide(true)}
+                      className="text-sm text-gray-600 hover:underline mt-2"
+                    >
+                      Bekijk maattabel
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -358,7 +370,11 @@ export const LegendDetail = () => {
               </div>
 
               {config && (
-                <div className="border-t pt-6">
+                // Alleen op desktop — op mobiel dekt de vaste onderbalk
+                // hieronder (lg:hidden) al dezelfde prijs + actie af. Beide
+                // tegelijk tonen gaf een dubbele "In winkelwagen"-knop op
+                // mobiel.
+                <div className="hidden lg:block border-t pt-6">
                   <div className="flex justify-between items-center mb-6">
                     <span className="text-2xl font-bold">
                       €{(price * quantity).toFixed(2)}
@@ -413,6 +429,15 @@ export const LegendDetail = () => {
           </button>
         )}
       </div>
+      {showSizeGuide && selectedProductType === 'tshirt' && (
+        <SizeGuideTshirt onClose={() => setShowSizeGuide(false)} />
+      )}
+      {showSizeGuide && selectedProductType === 'hoodie' && (
+        <SizeGuideHoodie onClose={() => setShowSizeGuide(false)} />
+      )}
+      {showSizeGuide && selectedProductType === 'sweater' && (
+        <SizeGuideSweater onClose={() => setShowSizeGuide(false)} />
+      )}
     </div>
   );
 };
