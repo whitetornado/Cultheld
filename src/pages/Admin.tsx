@@ -1103,82 +1103,120 @@ function LegendForm({
 
   // Print gebied is normaal gedeeld per product type/kleur (product_configs).
   // Een enkel legend/design met een afwijkende vorm (bv. een liggend design
-  // i.p.v. een staande speler) kan hier zijn eigen print gebied krijgen —
-  // dat overschrijft dan de gedeelde template voor alle producttypes van
-  // deze ene legend, zonder de template voor de rest aan te passen.
-  const [useCustomPrintArea, setUseCustomPrintArea] = useState(false);
-  const [printOverrideId, setPrintOverrideId] = useState<string | null>(null);
-  const [previewProductTypeId, setPreviewProductTypeId] = useState<string>(productTypes[0]?.id || '');
-  const [printArea, setPrintArea] = useState({ x: 0.5, y: 0.35, width: 0.3, height: 0.4 });
-  const [printFitMode, setPrintFitMode] = useState<'contain' | 'cover' | 'smart_fit'>('smart_fit');
-  const [printPadding, setPrintPadding] = useState(0.05);
-  const [printVerticalBias, setPrintVerticalBias] = useState(0.5);
+  // i.p.v. een staande speler) kan hier zijn eigen print gebied krijgen — per
+  // producttype, want een box die getuned is voor een T-shirt (smal, staand)
+  // past niet vanzelf op een hoodie of sweater. Elk producttype heeft dus
+  // zijn eigen aan/uit-status en eigen box; niets hiervan is gedeeld tussen
+  // producttypes.
+  type PrintOverrideEntry = {
+    id: string | null;
+    enabled: boolean;
+    printArea: { x: number; y: number; width: number; height: number };
+    fitMode: 'contain' | 'cover' | 'smart_fit';
+    padding: number;
+    verticalBias: number;
+  };
+  const [printOverrides, setPrintOverrides] = useState<Record<string, PrintOverrideEntry>>({});
+  const [activeProductTypeId, setActiveProductTypeId] = useState<string>(productTypes[0]?.id || '');
 
   const previewConfig = productConfigs.find(
-    (c) => c.product_type_id === previewProductTypeId && c.is_default
-  ) || productConfigs.find((c) => c.product_type_id === previewProductTypeId);
+    (c) => c.product_type_id === activeProductTypeId && c.is_default
+  ) || productConfigs.find((c) => c.product_type_id === activeProductTypeId);
 
-  const seedPrintAreaFromDefault = () => {
-    if (previewConfig) {
-      setPrintArea({
-        x: previewConfig.print_area_x,
-        y: previewConfig.print_area_y,
-        width: previewConfig.print_area_width,
-        height: previewConfig.print_area_height,
-      });
-      setPrintFitMode(previewConfig.fit_mode);
-      setPrintPadding(previewConfig.padding_percent);
-      setPrintVerticalBias(previewConfig.vertical_bias);
-    }
-  };
+  const activeEntry = printOverrides[activeProductTypeId];
+  const useCustomPrintArea = activeEntry?.enabled ?? false;
+  const defaultsFromConfig = previewConfig
+    ? {
+        printArea: {
+          x: previewConfig.print_area_x,
+          y: previewConfig.print_area_y,
+          width: previewConfig.print_area_width,
+          height: previewConfig.print_area_height,
+        },
+        fitMode: previewConfig.fit_mode,
+        padding: previewConfig.padding_percent,
+        verticalBias: previewConfig.vertical_bias,
+      }
+    : {
+        printArea: { x: 0.5, y: 0.35, width: 0.3, height: 0.4 },
+        fitMode: 'smart_fit' as const,
+        padding: 0.05,
+        verticalBias: 0.5,
+      };
+  const currentPrintArea = activeEntry?.printArea ?? defaultsFromConfig.printArea;
+  const currentFitMode = activeEntry?.fitMode ?? defaultsFromConfig.fitMode;
+  const currentPadding = activeEntry?.padding ?? defaultsFromConfig.padding;
+  const currentVerticalBias = activeEntry?.verticalBias ?? defaultsFromConfig.verticalBias;
+  const productTypesWithOverride = productTypes.filter((t) => printOverrides[t.id]?.enabled);
 
   useEffect(() => {
     if (mode === 'edit' && legendId) {
-      loadPrintOverride();
+      loadPrintOverrides();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, legendId]);
 
-  // Keep the "starting point" print area in sync with the selected preview
-  // product type's default template — but only while there's no custom area
-  // being edited yet, so switching preview product doesn't clobber in-progress
-  // custom edits.
-  useEffect(() => {
-    if (!useCustomPrintArea) {
-      seedPrintAreaFromDefault();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewProductTypeId, productConfigs]);
-
-  const loadPrintOverride = async () => {
+  const loadPrintOverrides = async () => {
     const { data } = await supabase
       .from('legend_print_overrides')
       .select('*')
-      .eq('legend_id', legendId)
-      .maybeSingle();
+      .eq('legend_id', legendId);
 
-    if (data) {
-      setPrintOverrideId(data.id);
-      setUseCustomPrintArea(true);
-      setPrintArea({
-        x: data.print_area_x,
-        y: data.print_area_y,
-        width: data.print_area_width,
-        height: data.print_area_height,
-      });
-      setPrintFitMode(data.fit_mode);
-      setPrintPadding(data.padding_percent);
-      setPrintVerticalBias(data.vertical_bias);
-    } else {
-      seedPrintAreaFromDefault();
-    }
+    const map: Record<string, PrintOverrideEntry> = {};
+    (data || []).forEach((row) => {
+      map[row.product_type_id] = {
+        id: row.id,
+        enabled: true,
+        printArea: {
+          x: row.print_area_x,
+          y: row.print_area_y,
+          width: row.print_area_width,
+          height: row.print_area_height,
+        },
+        fitMode: row.fit_mode,
+        padding: row.padding_percent,
+        verticalBias: row.vertical_bias,
+      };
+    });
+    setPrintOverrides(map);
+  };
+
+  const updateActiveOverride = (patch: Partial<Omit<PrintOverrideEntry, 'id' | 'enabled'>>) => {
+    setPrintOverrides((prev) => ({
+      ...prev,
+      [activeProductTypeId]: {
+        id: prev[activeProductTypeId]?.id ?? null,
+        enabled: true,
+        printArea: prev[activeProductTypeId]?.printArea ?? defaultsFromConfig.printArea,
+        fitMode: prev[activeProductTypeId]?.fitMode ?? defaultsFromConfig.fitMode,
+        padding: prev[activeProductTypeId]?.padding ?? defaultsFromConfig.padding,
+        verticalBias: prev[activeProductTypeId]?.verticalBias ?? defaultsFromConfig.verticalBias,
+        ...patch,
+      },
+    }));
   };
 
   const handleToggleCustomPrintArea = (checked: boolean) => {
-    setUseCustomPrintArea(checked);
-    if (checked && !printOverrideId) {
-      seedPrintAreaFromDefault();
-    }
+    setPrintOverrides((prev) => {
+      if (checked) {
+        return {
+          ...prev,
+          [activeProductTypeId]: {
+            id: prev[activeProductTypeId]?.id ?? null,
+            enabled: true,
+            printArea: prev[activeProductTypeId]?.printArea ?? defaultsFromConfig.printArea,
+            fitMode: prev[activeProductTypeId]?.fitMode ?? defaultsFromConfig.fitMode,
+            padding: prev[activeProductTypeId]?.padding ?? defaultsFromConfig.padding,
+            verticalBias: prev[activeProductTypeId]?.verticalBias ?? defaultsFromConfig.verticalBias,
+          },
+        };
+      }
+      if (!prev[activeProductTypeId]) return prev;
+      return {
+        ...prev,
+        [activeProductTypeId]: { ...prev[activeProductTypeId], enabled: false },
+      };
+    });
   };
 
   useEffect(() => {
@@ -1292,31 +1330,42 @@ function LegendForm({
     }
 
     if (insertedLegendId) {
-      if (useCustomPrintArea) {
-        const overrideData = {
-          legend_id: insertedLegendId,
-          print_area_x: printArea.x,
-          print_area_y: printArea.y,
-          print_area_width: printArea.width,
-          print_area_height: printArea.height,
-          fit_mode: printFitMode,
-          padding_percent: printPadding,
-          vertical_bias: printVerticalBias,
-        };
+      // Save/remove one override row per product type — each type's toggle
+      // and box are independent, so a T-shirt override never touches the
+      // hoodie or sweater rows and vice versa.
+      for (const type of productTypes) {
+        const entry = printOverrides[type.id];
+        if (entry?.enabled) {
+          const overrideData = {
+            legend_id: insertedLegendId,
+            product_type_id: type.id,
+            print_area_x: entry.printArea.x,
+            print_area_y: entry.printArea.y,
+            print_area_width: entry.printArea.width,
+            print_area_height: entry.printArea.height,
+            fit_mode: entry.fitMode,
+            padding_percent: entry.padding,
+            vertical_bias: entry.verticalBias,
+          };
 
-        const overrideResult = await supabase
-          .from('legend_print_overrides')
-          .upsert(overrideData, { onConflict: 'legend_id' });
+          const overrideResult = await supabase
+            .from('legend_print_overrides')
+            .upsert(overrideData, { onConflict: 'legend_id,product_type_id' });
 
-        if (overrideResult.error) {
-          error('Legend opgeslagen, maar fout bij eigen print gebied: ' + overrideResult.error.message);
-          setSaving(false);
-          return;
+          if (overrideResult.error) {
+            error(
+              `Legend opgeslagen, maar fout bij eigen print gebied (${type.name}): ` +
+                overrideResult.error.message
+            );
+            setSaving(false);
+            return;
+          }
+        } else if (entry?.id) {
+          // Toggle was switched back off for this product type — remove just
+          // that row so this producttype falls back to the shared template,
+          // leaving any other product type's override untouched.
+          await supabase.from('legend_print_overrides').delete().eq('id', entry.id);
         }
-      } else if (printOverrideId) {
-        // Toggle was switched back off — remove the override so this legend
-        // falls back to the shared product template again.
-        await supabase.from('legend_print_overrides').delete().eq('legend_id', insertedLegendId);
       }
     }
 
@@ -1540,6 +1589,40 @@ function LegendForm({
       </div>
 
       <div className="border-t pt-6">
+        <div className="mb-4">
+          <span className="font-semibold text-sm">Eigen print gebied</span>
+          <p className="text-gray-500 text-sm">
+            Standaard gebruikt elke legend hetzelfde print gebied als andere legends op hetzelfde
+            producttype (Producten &gt; Product Template). Zet dit per producttype aan als deze
+            afbeelding daar een andere verhouding nodig heeft (bv. een liggend design i.p.v. een
+            staande speler) — dat overschrijft dan alleen dat éne producttype, voor déze legend.
+            Een T-shirt-override laat de hoodie/sweater-instelling met rust en andersom.
+          </p>
+        </div>
+
+        {productTypes.length > 1 && (
+          <div className="mb-4">
+            <label className="block text-sm font-semibold mb-2">Producttype</label>
+            <select
+              value={activeProductTypeId}
+              onChange={(e) => setActiveProductTypeId(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
+            >
+              {productTypes.map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.name}
+                  {printOverrides[type.id]?.enabled ? ' — eigen print gebied ingesteld' : ''}
+                </option>
+              ))}
+            </select>
+            {productTypesWithOverride.length > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                Eigen print gebied ingesteld voor: {productTypesWithOverride.map((t) => t.name).join(', ')}
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="flex items-start gap-2 mb-4">
           <input
             type="checkbox"
@@ -1549,47 +1632,27 @@ function LegendForm({
             className="w-4 h-4 mt-1"
           />
           <label htmlFor="useCustomPrintArea" className="text-sm">
-            <span className="font-semibold">Eigen print gebied voor deze legend</span>
-            <p className="text-gray-500">
-              Standaard gebruikt elke legend hetzelfde print gebied als andere legends op hetzelfde
-              producttype (Producten &gt; Product Template). Zet dit aan als deze afbeelding een
-              andere verhouding heeft (bv. een liggend design i.p.v. een staande speler) — dat
-              overschrijft dan alleen voor déze legend, op elk producttype.
-            </p>
+            <span className="font-semibold">
+              Eigen print gebied voor deze legend op{' '}
+              {productTypes.find((t) => t.id === activeProductTypeId)?.name || 'dit producttype'}
+            </span>
           </label>
         </div>
 
         {useCustomPrintArea && (
           <div className="space-y-3">
-            {productTypes.length > 1 && (
-              <div>
-                <label className="block text-sm font-semibold mb-2">Voorbeeld op producttype</label>
-                <select
-                  value={previewProductTypeId}
-                  onChange={(e) => setPreviewProductTypeId(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-black"
-                >
-                  {productTypes.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
             {previewConfig ? (
               <PrintAreaEditor
                 mockupImageUrl={previewConfig.mockup_template_url}
                 testLegendUrl={previewUrl || undefined}
-                printArea={printArea}
-                padding={printPadding}
-                fitMode={printFitMode}
-                verticalBias={printVerticalBias}
-                onPrintAreaChange={setPrintArea}
-                onPaddingChange={setPrintPadding}
-                onFitModeChange={setPrintFitMode}
-                onVerticalBiasChange={setPrintVerticalBias}
+                printArea={currentPrintArea}
+                padding={currentPadding}
+                fitMode={currentFitMode}
+                verticalBias={currentVerticalBias}
+                onPrintAreaChange={(pa) => updateActiveOverride({ printArea: pa })}
+                onPaddingChange={(p) => updateActiveOverride({ padding: p })}
+                onFitModeChange={(fm) => updateActiveOverride({ fitMode: fm })}
+                onVerticalBiasChange={(vb) => updateActiveOverride({ verticalBias: vb })}
               />
             ) : (
               <p className="text-sm text-gray-500">

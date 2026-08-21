@@ -19,7 +19,7 @@ export const LegendDetail = () => {
   const [club, setClub] = useState<Club | null>(null);
   const [productTypes, setProductTypes] = useState<ProductType[]>([]);
   const [productConfigs, setProductConfigs] = useState<ProductConfig[]>([]);
-  const [printOverride, setPrintOverride] = useState<LegendPrintOverride | null>(null);
+  const [printOverrides, setPrintOverrides] = useState<LegendPrintOverride[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingToCart, setAddingToCart] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -53,7 +53,7 @@ export const LegendDetail = () => {
         legendData.club_id
           ? supabase.from('clubs').select('*').eq('id', legendData.club_id).maybeSingle()
           : Promise.resolve({ data: null }),
-        supabase.from('legend_print_overrides').select('*').eq('legend_id', legendData.id).maybeSingle(),
+        supabase.from('legend_print_overrides').select('*').eq('legend_id', legendData.id),
       ]);
 
       if (clubRes.data) {
@@ -73,8 +73,10 @@ export const LegendDetail = () => {
 
       // Most legends use the shared per-product-type print area. A design
       // whose artwork doesn't fit that shape (e.g. a wide graphic instead of
-      // a tall player) can have its own override here instead.
-      setPrintOverride(overrideRes.data || null);
+      // a tall player) can have its own override here instead — scoped per
+      // product type, since a box tuned for a T-shirt doesn't necessarily
+      // suit a hoodie or sweater.
+      setPrintOverrides(overrideRes.data || []);
     }
 
     setLoading(false);
@@ -99,6 +101,13 @@ export const LegendDetail = () => {
       (c) => c.product_type_id === selectedProductType && c.color_name === selectedColor
     );
   };
+
+  // A print override is scoped to one product type (e.g. a hoodie's box
+  // shouldn't reuse a T-shirt's box) — pick the one matching what's
+  // currently selected, if any.
+  const activeOverride = printOverrides.find(
+    (o) => o.product_type_id === selectedProductType
+  );
 
   const getCurrentPrice = () => {
     const productType = productTypes.find((t) => t.id === selectedProductType);
@@ -232,17 +241,17 @@ export const LegendDetail = () => {
                   mockupImageUrl={config.mockup_template_url}
                   legendPngUrl={legend.png_url}
                   printArea={
-                    printOverride
+                    activeOverride
                       ? {
-                          x: printOverride.print_area_x,
-                          y: printOverride.print_area_y,
-                          width: printOverride.print_area_width,
-                          height: printOverride.print_area_height,
-                          fitMode: printOverride.fit_mode,
-                          padding: printOverride.padding_percent,
-                          verticalBias: printOverride.vertical_bias,
-                          maxFillPct: printOverride.max_fill_pct,
-                          minVisualSize: printOverride.min_visual_size,
+                          x: activeOverride.print_area_x,
+                          y: activeOverride.print_area_y,
+                          width: activeOverride.print_area_width,
+                          height: activeOverride.print_area_height,
+                          fitMode: activeOverride.fit_mode,
+                          padding: activeOverride.padding_percent,
+                          verticalBias: activeOverride.vertical_bias,
+                          maxFillPct: activeOverride.max_fill_pct,
+                          minVisualSize: activeOverride.min_visual_size,
                         }
                       : {
                           x: config.print_area_x,

@@ -146,6 +146,7 @@ export interface ProductConfig {
 export interface LegendPrintOverride {
   id: string;
   legend_id: string;
+  product_type_id: string;
   print_area_x: number;
   print_area_y: number;
   print_area_width: number;
