@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, ChevronDown, ChevronUp, Copy } from 'lucide-react';
-import { supabase, isAdmin } from '../lib/supabase';
+import { supabase, isAdmin, ensureFreshSession, friendlySupabaseError } from '../lib/supabase';
 import { Link } from '../lib/router';
 import { Season, Club, Legend, ProductType, ProductVariant, ShirtTemplate, ProductConfig } from '../lib/types';
 import { useToast } from '../lib/toast';
@@ -1273,6 +1273,11 @@ function LegendForm({
     e.preventDefault();
     setSaving(true);
 
+    // This form can stay open a while (uploading an image, dragging the
+    // print area editor) — refresh the session up front so a stale access
+    // token doesn't surface as a raw "JWT expired" error partway through.
+    await ensureFreshSession();
+
     let finalPngUrl = pngUrl;
 
     if (uploadedFile) {
@@ -1324,7 +1329,7 @@ function LegendForm({
     }
 
     if (result.error) {
-      error('Fout: ' + result.error.message);
+      error(friendlySupabaseError(result.error, 'Fout: '));
       setSaving(false);
       return;
     }
@@ -1354,8 +1359,10 @@ function LegendForm({
 
           if (overrideResult.error) {
             error(
-              `Legend opgeslagen, maar fout bij eigen print gebied (${type.name}): ` +
-                overrideResult.error.message
+              friendlySupabaseError(
+                overrideResult.error,
+                `Legend opgeslagen, maar fout bij eigen print gebied (${type.name}): `
+              )
             );
             setSaving(false);
             return;
