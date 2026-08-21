@@ -1,18 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Mail, MapPin, Clock, Send } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-
-interface CMSPage {
-  id: string;
-  slug: string;
-  title: string;
-  content: string;
-  meta_description: string | null;
-}
+import { useState } from 'react';
+import { Mail, MapPin, Clock, Send, Phone } from 'lucide-react';
 
 export const Contact = () => {
-  const [page, setPage] = useState<CMSPage | null>(null);
-  const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,24 +14,6 @@ export const Contact = () => {
     website: '', // Honeypot field
   });
   const [formLoadTime] = useState(Date.now());
-
-  useEffect(() => {
-    loadPage();
-  }, []);
-
-  const loadPage = async () => {
-    const { data } = await supabase
-      .from('cms_pages')
-      .select('*')
-      .eq('slug', 'contact')
-      .eq('is_published', true)
-      .single();
-
-    if (data) {
-      setPage(data);
-    }
-    setLoading(false);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,30 +38,25 @@ export const Contact = () => {
     }
 
     try {
-      const { error: dbError } = await supabase
-        .from('contact_messages')
-        .insert({
-          name: formData.name,
-          email: formData.email,
-          subject: formData.subject,
-          message: formData.message,
-        });
+      // The edge function is the only writer of contact_messages (it runs
+      // with the service role, applies rate limiting/spam scoring, and
+      // sends the notification email) — there's no direct client-side
+      // insert here, since the anon key is intentionally not allowed to
+      // write to that table (see the RLS policy in
+      // 20260201222411_fix_contact_messages_rls_policy.sql).
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-contact-message`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
 
-      if (dbError) {
-        throw new Error(dbError.message);
-      }
+      const result = await response.json();
 
-      try {
-        const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-contact-message`;
-        await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData),
-        });
-      } catch (emailError) {
-        console.warn('Email notification failed:', emailError);
+      if (!response.ok) {
+        throw new Error(result.error || 'Er is een fout opgetreden bij het verzenden');
       }
 
       setSuccess(true);
@@ -109,23 +75,18 @@ export const Contact = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h1 className="text-4xl md:text-5xl font-bold mb-8">
-          {page?.title || 'Contact'}
-        </h1>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-10">
+          <h1 className="text-4xl md:text-5xl font-bold mb-3">Contact</h1>
+          <p className="text-lg text-gray-600">
+            Heb je een vraag over je bestelling of onze producten? We helpen je graag.
+          </p>
+        </div>
 
-        <div className="grid md:grid-cols-2 gap-8 mb-8">
-          <div className="bg-white rounded-lg shadow-sm p-8">
+        <div className="grid md:grid-cols-5 gap-8">
+          <div className="md:col-span-3 bg-white rounded-lg shadow-sm p-8">
             <h2 className="text-2xl font-bold mb-6">Stuur ons een bericht</h2>
 
             {success && (
@@ -143,32 +104,34 @@ export const Contact = () => {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="name" className="block text-sm font-semibold mb-2">
-                  Naam *
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                />
-              </div>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="name" className="block text-sm font-semibold mb-2">
+                    Naam *
+                  </label>
+                  <input
+                    type="text"
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                  />
+                </div>
 
-              <div>
-                <label htmlFor="email" className="block text-sm font-semibold mb-2">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-                />
+                <div>
+                  <label htmlFor="email" className="block text-sm font-semibold mb-2">
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    id="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    required
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
+                  />
+                </div>
               </div>
 
               <div>
@@ -233,50 +196,68 @@ export const Contact = () => {
             </form>
           </div>
 
-          <div>
-            <div className="bg-white rounded-lg shadow-sm p-8 mb-6">
-              <h2 className="text-2xl font-bold mb-4">Contactgegevens</h2>
-              <div className="prose prose-lg max-w-none">
-                <div className="whitespace-pre-wrap text-gray-700 leading-relaxed text-sm">
-                  {page?.content || 'Geen content beschikbaar'}
+          <div className="md:col-span-2 bg-white rounded-lg shadow-sm p-8 h-fit">
+            <h2 className="text-2xl font-bold mb-6">Contactgegevens</h2>
+
+            <div className="space-y-6">
+              <div className="flex gap-4">
+                <div className="bg-black text-white p-3 rounded-full h-fit flex-shrink-0">
+                  <Mail size={20} />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Email</h3>
+                  <a
+                    href="mailto:info@cultheld.nl"
+                    className="text-sm text-gray-600 hover:text-black transition-colors"
+                  >
+                    info@cultheld.nl
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <div className="bg-black text-white p-3 rounded-full h-fit flex-shrink-0">
+                  <Phone size={20} />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Telefoon</h3>
+                  <a
+                    href="tel:+31850602410"
+                    className="text-sm text-gray-600 hover:text-black transition-colors"
+                  >
+                    +31 85 060 2410
+                  </a>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <div className="bg-black text-white p-3 rounded-full h-fit flex-shrink-0">
+                  <Clock size={20} />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Klantenservice</h3>
+                  <p className="text-sm text-gray-600">Ma-Vr: 09:00 - 17:00</p>
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <div className="bg-black text-white p-3 rounded-full h-fit flex-shrink-0">
+                  <MapPin size={20} />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">Adres</h3>
+                  <address className="text-sm text-gray-600 not-italic leading-relaxed">
+                    Cultheld
+                    <br />
+                    Stavangerweg 21-9
+                    <br />
+                    9723 JC Groningen
+                    <br />
+                    Nederland
+                  </address>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-lg shadow-sm p-6 flex flex-col items-center text-center">
-            <div className="bg-black text-white p-4 rounded-full mb-4">
-              <Mail size={28} />
-            </div>
-            <h3 className="font-semibold mb-2">Email</h3>
-            <a
-              href="mailto:info@cultheld.nl"
-              className="text-sm text-gray-600 hover:text-black transition-colors"
-            >
-              info@cultheld.nl
-            </a>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm p-6 flex flex-col items-center text-center">
-            <div className="bg-black text-white p-4 rounded-full mb-4">
-              <Clock size={28} />
-            </div>
-            <h3 className="font-semibold mb-2">Openingstijden</h3>
-            <p className="text-sm text-gray-600">
-              Ma-Vr: 09:00 - 17:00
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm p-6 flex flex-col items-center text-center">
-            <div className="bg-black text-white p-4 rounded-full mb-4">
-              <MapPin size={28} />
-            </div>
-            <h3 className="font-semibold mb-2">Locatie</h3>
-            <p className="text-sm text-gray-600">
-              Groningen, Nederland
-            </p>
           </div>
         </div>
       </div>
