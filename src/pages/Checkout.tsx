@@ -82,8 +82,19 @@ const PaymentForm = ({ purchaseId, returnToken }: PaymentFormProps) => {
   };
 
   return (
-    <form onSubmit={handlePay}>
-      <PaymentElement />
+    <form onSubmit={handlePay} className="[overflow-anchor:none]">
+      <PaymentElement
+        options={{
+          layout: 'tabs',
+          paymentMethodOrder: ['ideal', 'card', 'apple_pay', 'google_pay', 'bancontact'],
+        }}
+        onReady={() => {
+          // The address form is long, so the customer is already scrolled down
+          // when this mounts. Stripe then grows the iframe; Chrome's scroll
+          // anchoring keeps the pay button in view and hides the methods.
+          window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+        }}
+      />
 
       {payError && (
         <div className="mt-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-4">
@@ -143,6 +154,11 @@ export const Checkout = () => {
   useEffect(() => {
     loadUserProfile();
   }, []);
+
+  useEffect(() => {
+    if (!clientSecret) return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [clientSecret]);
 
   const loadUserProfile = async () => {
     try {
